@@ -290,7 +290,7 @@ push branch → open PR → progress report → you review → merge PR into
 
 | Phase | Branch | Deliverable | Key tests |
 |-------|--------|-------------|-----------|
-| **0. Foundation** | `feature/00-foundation` | Dependencies, folder structure, theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
+| **0. Foundation** | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
 | **1. Data layer** | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |

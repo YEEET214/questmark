@@ -261,9 +261,15 @@ zoom out to see all quests.
 * One branch per feature: `feature/<phase-number>-<short-name>`, e.g.
   `feature/01-data-layer`.
 * Detailed commits on the branch: what was done, why, and how it was tested.
-* When the feature is finished and green, merge into `main` with
-  `--no-ff`, so each feature remains visible as one unit in the history.
-  Then push `main` and the branch to `origin`.
+* When the feature is finished and green, push the branch and **open a pull
+  request** into `main` on GitHub. The PR description summarises the
+  feature, the design choices made and how it was tested.
+* The user reviews the PR. After their approval, it is merged with a merge
+  commit (`gh pr merge --merge`, the same as `--no-ff`), so each feature
+  stays visible as one unit in the history. Then local `main` is updated.
+* Why PRs: they give one place to review the full diff of a feature, keep a
+  written record of each feature on GitHub, and make sure nothing reaches
+  `main` without the user seeing it.
 
 ### D13. Platforms: Android and iOS
 * All chosen packages (sqflite, geolocator, flutter_map, vector_map_tiles,
@@ -279,7 +285,8 @@ zoom out to see all quests.
 ## 4. Phases
 
 Each phase: create branch → implement → tests green → detailed commits →
-merge to `main` → push → progress report → wait for your go-ahead.
+push branch → open PR → progress report → you review → merge PR into
+`main` → wait for your go-ahead on the next phase.
 
 | Phase | Branch | Deliverable | Key tests |
 |-------|--------|-------------|-----------|

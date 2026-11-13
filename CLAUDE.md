@@ -12,7 +12,8 @@ QuestMark is a Flutter/Dart to-do app. Tasks can have a location and are shown o
 
 - Build phase by phase as laid out in `docs/PLAN.md`. Never implement several phases in one go. After each phase, report progress and wait for the user's go-ahead.
 - Every feature gets unit and/or widget tests. `flutter test` and `flutter analyze` must pass before committing.
-- Git: one branch per feature (`feature/<NN>-<short-name>`), detailed commits on it (what was done, why, how it was tested), then `git merge --no-ff` into `main` and push both to `origin` (github.com/YEEET214/questmark).
+- Git: one branch per feature (`feature/<NN>-<short-name>`), with detailed commits on it (what was done, why, how it was tested). When it's done and green, push the branch and **open a pull request into `main`** (description: summary, design choices, testing). Merge only after the user approves, with `gh pr merge <n> --merge` (a merge commit, never squash or rebase). Then `git checkout main && git pull`. Never merge feature branches into `main` locally.
+- `gh` is installed but not on the bash PATH: call it as `"/c/Program Files/GitHub CLI/gh.exe"` (bash) or `& "C:\Program Files\GitHub CLI\gh.exe"` (PowerShell). It is already authenticated.
 - Targets are Android **and** iOS. Development is on Windows, so iOS config (Info.plist etc.) must be written but cannot be built here.
 - Explain design choices and the reasoning behind them to the user, and record significant ones in the PLAN.md decision log.
 

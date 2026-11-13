@@ -1,6 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network: map tiles (OpenFreeMap) and address search (Nominatim).
+         Debug builds get INTERNET automatically; release builds need it here. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- GPS: show the player's position on the map (foreground only, no
+         ACCESS_BACKGROUND_LOCATION). Coarse is required alongside fine on
+         Android 12+ so the user may choose "approximate". -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
-        android:label="questmark"
+        android:label="QuestMark"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

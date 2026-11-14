@@ -105,6 +105,42 @@ tasks(
 * Times are stored as epoch milliseconds (integers), which sort and compare
   cheaply in SQL.
 
+**Implementation notes (Phase 1):**
+* **Our own `GeoPoint` type, not the map library's `LatLng`.** This keeps
+  the models and the data layer independent of `flutter_map`, so they can
+  be tested without it, and swapping the map library would only touch the
+  UI. `GeoPoint` validates its range (lat −90..90, lng −180..180, finite).
+  Because a location is one `GeoPoint?`, "latitude without longitude"
+  can't be represented at all.
+* **Immutable `Task` with `copyWith`.** Nullable fields in `copyWith` take a
+  function (`location: () => null`), because a plain `null` argument can't
+  tell "leave unchanged" apart from "clear". This is the same pattern
+  Flutter uses in its own APIs.
+* **Normalisation in the constructor:** the title is trimmed and must not be
+  empty; a blank description or address becomes `null`; times become UTC
+  truncated to milliseconds. SQLite stores milliseconds, so without the
+  truncation a task created with `DateTime.now()` (which carries
+  microseconds) would not equal itself after being saved and loaded.
+* **Validation in two layers:** the Dart model validates first, and SQL
+  `CHECK` constraints repeat the key rules (non-blank title, `is_done` is
+  0/1, coordinate ranges, both-or-neither coordinates). The constraints
+  protect the data if a future bug or migration bypasses the model.
+* **Repository interface + sqflite implementation.** The state layer
+  depends on `TaskRepository`, an `abstract interface class`, so Phase 2
+  widget tests can use an in-memory fake. Error contract: inserting a task
+  that already has an id, or updating one without, throws `ArgumentError`;
+  updating an id that doesn't exist throws `TaskNotFoundException`;
+  `delete` returns whether something was deleted.
+* **List order is defined in SQL:** active before done, then tasks with a
+  due date (earliest first), then newest created first. It is backed by an
+  index on `(is_done, created_at)`.
+* **Migrations as an ordered list of SQL steps.** The schema version is the
+  list's length. A fresh install runs every step, and an upgrade runs only
+  the missing ones, so both paths always produce the same schema. sqflite
+  wraps them in a transaction, so a failed migration rolls back. Tests
+  verify that both upgrade and rollback keep existing data. Steps that have
+  shipped are never edited, only appended.
+
 ### D4. Where the map comes from (re-researched)
 
 **Finding: OSM's own tile server cannot be used for any downloading.**

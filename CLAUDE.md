@@ -6,13 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QuestMark is a Flutter/Dart to-do app. Tasks can have a location and are shown on an OpenStreetMap world map as open-world-game-style "quest markers", together with the phone's live GPS position (no route planning). Storage is local SQLite only.
 
-**`docs/PLAN.md` is the source of truth** for requirements, the phased roadmap, the decision log (D1–D11) and open questions. Read it before starting work, and update it when a decision changes or a phase is completed.
+**`docs/PLAN.md` is the source of truth** for requirements, the phased roadmap, the decision log (D1, D2, …) and open questions. Read it before starting work, and update it when a decision changes, and update the Status column of the phase table when a phase starts or its PR is merged.
 
 ## Working agreement with the user
 
 - Build phase by phase as laid out in `docs/PLAN.md`. Never implement several phases in one go. After each phase, report progress and wait for the user's go-ahead.
 - Every feature gets unit and/or widget tests. `flutter test` and `flutter analyze` must pass before committing.
 - Git: one branch per feature (`feature/<NN>-<short-name>`), with detailed commits on it (what was done, why, how it was tested). When it's done and green, push the branch and **open a pull request into `main`** (description: summary, design choices, testing). Merge only after the user approves, with `gh pr merge <n> --merge` (a merge commit, never squash or rebase). Then `git checkout main && git pull`. Never merge feature branches into `main` locally.
+- **Never delete branches on GitHub**, even after their PR is merged. They are kept so the app's development history can be viewed. Never use `gh pr merge --delete-branch`, `git push --delete` or `git push origin :<branch>`, and keep the repo setting "Automatically delete head branches" off.
 - **Ask the user for permission before installing, uninstalling, upgrading or otherwise modifying anything on their system** outside this repository. This covers system tools and CLIs (e.g. GitHub CLI), SDKs (`flutter upgrade`, Android SDK components), global packages, PATH or environment variables, and global git/IDE config. Say what will change and why, and wait for a yes. Project-local changes (e.g. `flutter pub add` editing pubspec.yaml) are part of normal work and don't need this.
 - `gh` is installed but not on the bash PATH: call it as `"/c/Program Files/GitHub CLI/gh.exe"` (bash) or `& "C:\Program Files\GitHub CLI\gh.exe"` (PowerShell). It is already authenticated.
 - Targets are Android **and** iOS. Development is on Windows, so iOS config (Info.plist etc.) must be written but cannot be built here.

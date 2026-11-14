@@ -105,6 +105,42 @@ tasks(
 * Times are stored as epoch milliseconds (integers), which sort and compare
   cheaply in SQL.
 
+**Implementation notes (Phase 1):**
+* **Our own `GeoPoint` type, not the map library's `LatLng`.** This keeps
+  the models and the data layer independent of `flutter_map`, so they can
+  be tested without it, and swapping the map library would only touch the
+  UI. `GeoPoint` validates its range (lat −90..90, lng −180..180, finite).
+  Because a location is one `GeoPoint?`, "latitude without longitude"
+  can't be represented at all.
+* **Immutable `Task` with `copyWith`.** Nullable fields in `copyWith` take a
+  function (`location: () => null`), because a plain `null` argument can't
+  tell "leave unchanged" apart from "clear". This is the same pattern
+  Flutter uses in its own APIs.
+* **Normalisation in the constructor:** the title is trimmed and must not be
+  empty; a blank description or address becomes `null`; times become UTC
+  truncated to milliseconds. SQLite stores milliseconds, so without the
+  truncation a task created with `DateTime.now()` (which carries
+  microseconds) would not equal itself after being saved and loaded.
+* **Validation in two layers:** the Dart model validates first, and SQL
+  `CHECK` constraints repeat the key rules (non-blank title, `is_done` is
+  0/1, coordinate ranges, both-or-neither coordinates). The constraints
+  protect the data if a future bug or migration bypasses the model.
+* **Repository interface + sqflite implementation.** The state layer
+  depends on `TaskRepository`, an `abstract interface class`, so Phase 2
+  widget tests can use an in-memory fake. Error contract: inserting a task
+  that already has an id, or updating one without, throws `ArgumentError`;
+  updating an id that doesn't exist throws `TaskNotFoundException`;
+  `delete` returns whether something was deleted.
+* **List order is defined in SQL:** active before done, then tasks with a
+  due date (earliest first), then newest created first. It is backed by an
+  index on `(is_done, created_at)`.
+* **Migrations as an ordered list of SQL steps.** The schema version is the
+  list's length. A fresh install runs every step, and an upgrade runs only
+  the missing ones, so both paths always produce the same schema. sqflite
+  wraps them in a transaction, so a failed migration rolls back. Tests
+  verify that both upgrade and rollback keep existing data. Steps that have
+  shipped are never edited, only appended.
+
 ### D4. Where the map comes from (re-researched)
 
 **Finding: OSM's own tile server cannot be used for any downloading.**
@@ -229,7 +265,7 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 
 ### D9. Quest-marker visual language
 | State | Marker |
-|-------|--------|
+|-------|--------|--------|-------------|-----------|
 | Active task | golden **!** in a shield/diamond, gentle bobbing animation |
 | Task due soon / overdue | orange / red tint |
 | Completed task | grey **✓**, smaller, no animation |
@@ -270,6 +306,8 @@ zoom out to see all quests.
 * Why PRs: they give one place to review the full diff of a feature, keep a
   written record of each feature on GitHub, and make sure nothing reaches
   `main` without the user seeing it.
+* Branches are **never deleted on GitHub**, even after merging, so every
+  feature's branch stays available for viewing the app's history.
 
 ### D13. Platforms: Android and iOS
 * All chosen packages (sqflite, geolocator, flutter_map, vector_map_tiles,
@@ -288,19 +326,19 @@ Each phase: create branch → implement → tests green → detailed commits →
 push branch → open PR → progress report → you review → merge PR into
 `main` → wait for your go-ahead on the next phase.
 
-| Phase | Branch | Deliverable | Key tests |
-|-------|--------|-------------|-----------|
-| **0. Foundation** | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
-| **1. Data layer** | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
-| **2. Task list UI** | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
-| **3. Map + quest markers** | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
-| **5. GPS** | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
-| **6. Pin on map** | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
-| **7. Address search** | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
-| **8a. Bundled world map** | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
-| **8b. Region download** | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there | — |
+| Phase | Status | Branch | Deliverable | Key tests |
+|-------|--------|--------|-------------|-----------|
+| **0. Foundation** | ✅ Done (PR #1) | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
+| **1. Data layer** | 🚧 In progress | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
+| **2. Task list UI** | ⬜ Planned | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
+| **3. Map + quest markers** | ⬜ Planned | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
+| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
+| **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
+| **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
+| **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
+| **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
+| **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
+| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there | — |
 
 ---
 

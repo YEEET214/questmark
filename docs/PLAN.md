@@ -191,9 +191,23 @@ draws itself. This turns out to suit our needs well:
   needs a server, which is out of scope for this project.
 
 ### D5. Map widget: `flutter_map` + vector-tile plugin
-* **Choice:** `flutter_map` with `vector_map_tiles` (MapLibre/OpenMapTiles
-  style support). The exact versions that work together are pinned in
-  Phase 3.
+* **Choice (revised in Phase 3):** `flutter_map` **8.3.2** +
+  `flutter_map_vector_tiles` **2.11.0**, pinned to exact versions.
+  * The plan originally named `vector_map_tiles`. Its latest stable release
+    (8.0.0, 2024) only works with `flutter_map` 7, and its `flutter_map` 8
+    support exists only as betas (9.0.0-beta.13).
+  * `flutter_map_vector_tiles` is stable, supports `flutter_map` 8, and
+    lists OpenFreeMap as a supported provider. Its built-in disk cache
+    (in a folder the OS doesn't clear, with a lifetime per tile) covers
+    the persistent-cache requirement. It has a pluggable tile-source
+    interface (`resolveProvider`) and an MBTiles companion package, which
+    is exactly what Phase 8's offline maps need.
+  * **Risk:** it's young (first release August 2026) with a single
+    maintainer. Mitigation: exact version pins, and all package use stays
+    in `lib/ui/map/base_map_layer.dart`, so it could be swapped out.
+  * Checked against the real OpenFreeMap "Liberty" style: one vector
+    source (`openmaptiles`, data up to zoom 14), sprites and fonts load,
+    and its attribution matches ours.
 * **Why:** `flutter_map` is pure Dart and works the same on Android and iOS.
   Markers are ordinary Flutter widgets, so animated quest markers are easy,
   and we control exactly how tiles are fetched and stored.
@@ -310,7 +324,7 @@ zoom out to see all quests.
   feature's branch stays available for viewing the app's history.
 
 ### D13. Platforms: Android and iOS
-* All chosen packages (sqflite, geolocator, flutter_map, vector_map_tiles,
+* All chosen packages (sqflite, geolocator, flutter_map, flutter_map_vector_tiles,
   http, provider) support both platforms.
 * **Limitation:** development happens on Windows, and iOS apps can only be
   built and run on a Mac with Xcode. We will write the iOS configuration
@@ -363,6 +377,53 @@ zoom out to see all quests.
   is already covered by its own tests. Clocks are injected, so tests about
   "today" and "overdue" are deterministic.
 
+### D15. Map page and quest markers (Phase 3)
+* **Where the map comes from:** the OpenFreeMap "Liberty" style is loaded
+  once via `StyleReader`, with our `QuestMark/1.0.0` User-Agent. The
+  package sends that header with the style request and with every tile,
+  sprite and font request it makes. The style bundle is cached on disk, so
+  after the first load the style works offline.
+* **Tile cache:** 100 MB, 30-day lifetime, in the app support folder. A
+  tile already seen is drawn from disk, so repeat views cost OpenFreeMap
+  nothing. If the network fails on first launch, a "Couldn't load the map"
+  banner with Retry is shown. Phase 8a's bundled world map will close that
+  gap.
+* **Attribution:** "OpenFreeMap · © OpenMapTiles · Data © OpenStreetMap
+  contributors", in `flutter_map`'s collapsible attribution button. The
+  data licence (ODbL) requires it.
+* **Starting view** (`InitialMapView`, pure and unit-tested): no quests →
+  the whole world; one quest (or all at one spot) → centred on it at
+  zoom 15; several → zoomed to fit them all (capped at zoom 15). The map
+  waits for the first task load so it doesn't jump, and afterwards the
+  camera only moves when the user moves it.
+* **No rotation:** pinch-rotate is disabled, so north stays up. A to-do
+  map doesn't need rotation, and accidental rotation is disorienting.
+* **Marker states** (`QuestMarkerKind.of`, pure and unit-tested): done →
+  small grey check; open and the due day has passed → red "!"; due today
+  or tomorrow → orange "!"; otherwise gold "!". Days are local calendar
+  days. Drawing order puts urgent markers on top: done < active <
+  due soon < overdue.
+* **Animation costs nothing while hidden:** open quests bob gently, but
+  the animation stops when the OS "remove animations" accessibility
+  setting is on, and when the map tab is hidden. HomeShell wraps each tab
+  in `TickerMode`, so the kept-alive map uses no CPU or battery while
+  you're on the list.
+* **Tapping a marker** opens a bottom sheet with the details and
+  Complete/Reopen and Edit buttons. Edit, delete and undo are shared with
+  the list page through `lib/ui/tasks/task_actions.dart`, so both screens
+  behave the same.
+* **Accessibility:** each marker is a screen-reader button labelled e.g.
+  "Quest, overdue: Buy milk".
+* **Guard tests:** a test fails if any code line references
+  `tile.openstreetmap.org`, and another checks that the User-Agent
+  version matches `pubspec.yaml`.
+* **Build note:** `path_provider_android` (used by the map packages)
+  depends on `jni`, which compiles native code with CMake. The first
+  build made Gradle download CMake 3.22.1 automatically. To keep system
+  changes in the user's hands, `android/gradle.properties` now sets
+  `android.builder.sdkDownload=false`, so a missing SDK component fails
+  the build with a message instead of installing silently.
+
 ---
 
 ## 4. Phases
@@ -375,8 +436,8 @@ push branch → open PR → progress report → you review → merge PR into
 |-------|--------|--------|-------------|-----------|
 | **0. Foundation** | ✅ Done (PR #1) | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
-| **2. Task list UI** | 🚧 In progress | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
-| **3. Map + quest markers** | ⬜ Planned | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
+| **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
+| **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
 | **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |

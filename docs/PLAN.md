@@ -306,6 +306,8 @@ zoom out to see all quests.
 * Why PRs: they give one place to review the full diff of a feature, keep a
   written record of each feature on GitHub, and make sure nothing reaches
   `main` without the user seeing it.
+* Branches are **never deleted on GitHub**, even after merging, so every
+  feature's branch stays available for viewing the app's history.
 
 ### D13. Platforms: Android and iOS
 * All chosen packages (sqflite, geolocator, flutter_map, vector_map_tiles,

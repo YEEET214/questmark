@@ -87,6 +87,44 @@ void main() {
     });
   });
 
+  group('Task.isOverdue', () {
+    final now = DateTime(2026, 11, 14, 10); // local time
+
+    Task due(DateTime? at, {bool done = false}) =>
+        Task(title: 'x', createdAt: created, dueAt: at, isDone: done);
+
+    test('false without a due date', () {
+      expect(due(null).isOverdue(now), isFalse);
+    });
+
+    test('true when the due day is before today', () {
+      expect(due(DateTime(2026, 11, 13, 23, 59)).isOverdue(now), isTrue);
+    });
+
+    test('false on the due day itself, even later that day', () {
+      expect(due(DateTime(2026, 11, 14)).isOverdue(now), isFalse);
+      expect(due(DateTime(2026, 11, 14)).isOverdue(DateTime(2026, 11, 14, 23)),
+          isFalse);
+    });
+
+    test('false for future due dates', () {
+      expect(due(DateTime(2026, 12, 1)).isOverdue(now), isFalse);
+    });
+
+    test('false once the task is done', () {
+      expect(due(DateTime(2026, 1, 1), done: true).isOverdue(now), isFalse);
+    });
+  });
+
+  group('Task.withoutId', () {
+    test('clears only the id', () {
+      final t = fullTask();
+      final copy = t.withoutId();
+      expect(copy.id, isNull);
+      expect(copy.copyWith(id: t.id), t);
+    });
+  });
+
   group('Task.copyWith', () {
     test('changes only the given fields', () {
       final t = fullTask();

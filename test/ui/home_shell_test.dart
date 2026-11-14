@@ -3,10 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/app.dart';
 import 'package:questmark/state/navigation_controller.dart';
 
+import '../helpers/fake_task_repository.dart';
+
 void main() {
   group('HomeShell', () {
+    Future<void> pumpApp(WidgetTester tester,
+        [NavigationController? nav]) async {
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: FakeTaskRepository(),
+        navigationController: nav,
+      ));
+      await tester.pumpAndSettle(); // let the task list finish loading
+    }
+
     testWidgets('app boots on the quest list', (tester) async {
-      await tester.pumpWidget(const QuestMarkApp());
+      await pumpApp(tester);
 
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.text('No quests yet'), findsOneWidget);
@@ -17,7 +28,7 @@ void main() {
     testWidgets('tapping Map shows the map page, tapping Quests goes back',
         (tester) async {
       final nav = NavigationController();
-      await tester.pumpWidget(QuestMarkApp(navigationController: nav));
+      await pumpApp(tester, nav);
 
       await tester.tap(find.text('Map'));
       await tester.pumpAndSettle();
@@ -36,7 +47,7 @@ void main() {
     testWidgets('switching tabs from code updates the UI', (tester) async {
       // This is the mechanism phase 4 ("show on map") relies on.
       final nav = NavigationController();
-      await tester.pumpWidget(QuestMarkApp(navigationController: nav));
+      await pumpApp(tester, nav);
 
       nav.select(AppTab.map);
       await tester.pumpAndSettle();
@@ -49,7 +60,7 @@ void main() {
     testWidgets('both pages stay mounted when switching tabs',
         (tester) async {
       final nav = NavigationController();
-      await tester.pumpWidget(QuestMarkApp(navigationController: nav));
+      await pumpApp(tester, nav);
 
       nav.select(AppTab.map);
       await tester.pumpAndSettle();

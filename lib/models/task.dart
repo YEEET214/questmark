@@ -54,6 +54,17 @@ class Task {
 
   bool get hasLocation => location != null;
 
+  /// Whether this task is still open and its due *day* (local time) is
+  /// before today. A task due today is not overdue yet.
+  bool isOverdue(DateTime now) {
+    final due = dueAt;
+    if (isDone || due == null) return false;
+    final d = due.toLocal();
+    final n = now.toLocal();
+    return DateTime(d.year, d.month, d.day)
+        .isBefore(DateTime(n.year, n.month, n.day));
+  }
+
   /// Returns a copy with the given fields replaced.
   ///
   /// The nullable fields take a function, so they can be explicitly
@@ -81,6 +92,19 @@ class Task {
       location: location != null ? location() : this.location,
     );
   }
+
+  /// A copy with no database id, ready to be inserted as a new row (used
+  /// to undo a delete). [copyWith] can't do this, because `id: null` there
+  /// means "keep the id".
+  Task withoutId() => Task(
+        title: title,
+        description: description,
+        isDone: isDone,
+        createdAt: createdAt,
+        dueAt: dueAt,
+        address: address,
+        location: location,
+      );
 
   /// Column names, shared with the schema so they're never misspelled.
   static const colId = 'id';

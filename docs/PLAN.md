@@ -318,6 +318,51 @@ zoom out to see all quests.
   only be verified on a Mac. Day-to-day testing uses Android plus
   `flutter test`.
 
+### D14. Task list UI (Phase 2)
+* **`TaskListController`, shared by both tabs.** It holds the task list for
+  the whole app. The list page uses it now, and the map will use its
+  `locatedTasks` in Phase 3, so both pages always show the same data.
+* **Write through, then reload.** Every change is saved to SQLite first,
+  then the list is re-read. Patching the in-memory list optimistically
+  would mean repeating the SQL ordering rules in Dart, and the two could
+  drift apart. A local reload takes about a millisecond, so the simpler
+  approach costs nothing noticeable, and the database stays the single
+  source of truth.
+* **Errors:** a failed *load* is stored in the controller, and the page
+  shows a "Try again" screen. A failed *change* is rethrown to the UI and
+  shown in a snackbar, because only the screen that made the change knows
+  what to tell the user.
+* **The editor is a plain form that returns a result.** It pops a sealed
+  `TaskEditorResult` (`TaskEditorSaved(title, description, dueAt)` or
+  `TaskEditorDeleted`), and the list page decides what to do with it. The
+  editor never touches storage, and fields it doesn't show (location, done
+  state) can't be lost by accident.
+* **Deleting has two routes:** swipe left (fast), or the Delete button in
+  the editor, with a confirmation dialog (easier to discover). Both show a
+  snackbar with **Undo**.
+  * The delete runs in `Dismissible.confirmDismiss`, not in `onDismissed`.
+    Flutter requires a dismissed item to leave the widget tree
+    immediately, but our delete is asynchronous. Awaiting it in
+    `confirmDismiss` means the list has already been rebuilt without the
+    item when the animation ends, and if the delete fails the tile simply
+    slides back.
+  * Undo re-inserts the task as a new row, so it gets a new id. Nothing
+    keeps task ids long-term, so this keeps the repository contract simple
+    ("insert never takes an id").
+* **Due dates are a day, not a time.** The picker stores local midnight of
+  the chosen day. A task is **overdue** only once that day has fully
+  passed, so a task due today is not overdue. Overdue quests show
+  "Overdue · <date>" in the theme's error colour.
+* **Dates** are shown as **dd-mm-yyyy** (e.g. `20-11-2026`, the user's
+  choice). A single `formatDate` helper (`lib/ui/formatting.dart`) is used
+  everywhere, so every screen shows the same format. It is a fixed format,
+  not locale-based, and needs no `intl` package.
+* **Testing:** widget tests use `FakeTaskRepository`, an in-memory fake
+  with the same contract and ordering. Real database I/O doesn't run
+  inside the fake-async zone of widget tests, and the SQLite repository
+  is already covered by its own tests. Clocks are injected, so tests about
+  "today" and "overdue" are deterministic.
+
 ---
 
 ## 4. Phases
@@ -329,8 +374,8 @@ push branch → open PR → progress report → you review → merge PR into
 | Phase | Status | Branch | Deliverable | Key tests |
 |-------|--------|--------|-------------|-----------|
 | **0. Foundation** | ✅ Done (PR #1) | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
-| **1. Data layer** | 🚧 In progress | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
-| **2. Task list UI** | ⬜ Planned | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
+| **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
+| **2. Task list UI** | 🚧 In progress | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | ⬜ Planned | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
 | **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |

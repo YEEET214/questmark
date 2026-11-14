@@ -12,6 +12,8 @@ void main() {
       await tester.pumpWidget(QuestMarkApp(
         taskRepository: FakeTaskRepository(),
         navigationController: nav,
+        // No real map tiles in tests.
+        mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle(); // let the task list finish loading
     }
@@ -22,7 +24,7 @@ void main() {
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.text('No quests yet'), findsOneWidget);
       // The map page is kept alive in the IndexedStack but is offstage.
-      expect(find.text('Map coming soon'), findsNothing);
+      expect(find.text('World Map'), findsNothing);
     });
 
     testWidgets('tapping Map shows the map page, tapping Quests goes back',
@@ -34,7 +36,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(nav.current, AppTab.map);
-      expect(find.text('Map coming soon'), findsOneWidget);
+      expect(find.text('World Map'), findsOneWidget);
       expect(find.text('No quests yet'), findsNothing);
 
       await tester.tap(find.text('Quests').last);
@@ -52,9 +54,26 @@ void main() {
       nav.select(AppTab.map);
       await tester.pumpAndSettle();
 
-      expect(find.text('Map coming soon'), findsOneWidget);
+      expect(find.text('World Map'), findsOneWidget);
       final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
       expect(bar.selectedIndex, AppTab.map.index);
+    });
+
+    testWidgets('the hidden tab has its animations paused', (tester) async {
+      final nav = NavigationController();
+      await pumpApp(tester, nav);
+
+      bool tickersOn(String pageText) => TickerMode.valuesOf(tester.element(
+              find.text(pageText, skipOffstage: false)))
+          .enabled;
+
+      expect(tickersOn('No quests yet'), isTrue);
+      expect(tickersOn('World Map'), isFalse);
+
+      nav.select(AppTab.map);
+      await tester.pumpAndSettle();
+      expect(tickersOn('No quests yet'), isFalse);
+      expect(tickersOn('World Map'), isTrue);
     });
 
     testWidgets('both pages stay mounted when switching tabs',

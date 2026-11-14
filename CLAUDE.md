@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QuestMark is a Flutter/Dart to-do app. Tasks can have a location and are shown on an OpenStreetMap world map as open-world-game-style "quest markers", together with the phone's live GPS position (no route planning). Storage is local SQLite only.
 
-**`docs/PLAN.md` is the source of truth** for requirements, the phased roadmap, the decision log (D1–D11) and open questions. Read it before starting work, and update it when a decision changes or a phase is completed.
+**`docs/PLAN.md` is the source of truth** for requirements, the phased roadmap, the decision log (D1, D2, …) and open questions. Read it before starting work, and update it when a decision changes, and update the Status column of the phase table when a phase starts or its PR is merged.
 
 ## Working agreement with the user
 

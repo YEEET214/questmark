@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/task.dart';
+import '../formatting.dart';
 
 /// What the editor hands back when it closes. (Closing with the back button
 /// returns `null`: nothing changes.)
@@ -115,7 +116,6 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final localizations = MaterialLocalizations.of(context);
     final dueDay = _dueDay;
 
     return Scaffold(
@@ -169,7 +169,7 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
               leading: const Icon(Icons.event),
               title: Text(dueDay == null
                   ? 'No due date'
-                  : 'Due ${localizations.formatShortDate(dueDay)}'),
+                  : 'Due ${formatDate(dueDay)}'),
               onTap: _pickDueDate,
               trailing: dueDay == null
                   ? TextButton(

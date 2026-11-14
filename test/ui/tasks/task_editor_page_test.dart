@@ -79,7 +79,7 @@ void main() {
     await tester.tap(find.text('20'));
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
-    expect(find.text('Due Nov 20, 2026'), findsOneWidget);
+    expect(find.text('Due 20-11-2026'), findsOneWidget);
 
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
@@ -101,7 +101,7 @@ void main() {
       expect(find.text('Edit quest'), findsOneWidget);
       expect(find.text('Return books'), findsOneWidget);
       expect(find.text('Library'), findsOneWidget);
-      expect(find.text('Due Nov 20, 2026'), findsOneWidget);
+      expect(find.text('Due 20-11-2026'), findsOneWidget);
     });
 
     testWidgets('the due date can be removed', (tester) async {

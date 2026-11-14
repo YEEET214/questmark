@@ -353,9 +353,10 @@ zoom out to see all quests.
   the chosen day. A task is **overdue** only once that day has fully
   passed, so a task due today is not overdue. Overdue quests show
   "Overdue · <date>" in the theme's error colour.
-* **Dates** use `MaterialLocalizations.formatShortDate` (e.g. "Nov 20,
-  2026"). It includes the year and follows the device locale, without
-  adding the `intl` package.
+* **Dates** are shown as **dd-mm-yyyy** (e.g. `20-11-2026`, the user's
+  choice). A single `formatDate` helper (`lib/ui/formatting.dart`) is used
+  everywhere, so every screen shows the same format. It is a fixed format,
+  not locale-based, and needs no `intl` package.
 * **Testing:** widget tests use `FakeTaskRepository`, an in-memory fake
   with the same contract and ordering. Real database I/O doesn't run
   inside the fake-async zone of widget tests, and the SQLite repository

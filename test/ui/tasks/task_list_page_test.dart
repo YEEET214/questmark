@@ -89,11 +89,11 @@ void main() {
         seed(2, 'soon', due: DateTime(2026, 11, 30), description: 'details'),
         seed(3, 'today', due: DateTime(2026, 11, 14)),
       ]);
-      expect(find.textContaining('Overdue · Nov 1, 2026'), findsOneWidget);
-      expect(find.textContaining('Due Nov 30, 2026'), findsOneWidget);
+      expect(find.textContaining('Overdue · 01-11-2026'), findsOneWidget);
+      expect(find.textContaining('Due 30-11-2026'), findsOneWidget);
       expect(find.textContaining('details'), findsOneWidget);
       // Due today is not overdue.
-      expect(find.textContaining('Due Nov 14, 2026'), findsOneWidget);
+      expect(find.textContaining('Due 14-11-2026'), findsOneWidget);
     });
   });
 

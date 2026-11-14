@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
 import '../../state/task_list_controller.dart';
+import '../formatting.dart';
 import 'task_editor_page.dart';
 
 /// Shows all tasks: active ones first, then a "Completed" section.
@@ -185,8 +186,7 @@ class _TaskTile extends StatelessWidget {
 
     final due = task.dueAt;
     if (due != null) {
-      final date =
-          MaterialLocalizations.of(context).formatShortDate(due.toLocal());
+      final date = formatDate(due.toLocal());
       final overdue = task.isOverdue(now);
       parts.add(TextSpan(
         text: overdue ? 'Overdue · $date' : 'Due $date',

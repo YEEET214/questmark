@@ -77,6 +77,8 @@ void main() {
           unorderedEquals(['done', 'done on map']));
       expect(controller.locatedTasks.map((t) => t.title),
           unorderedEquals(['open on map', 'done on map']));
+      expect(controller.unlocatedTasks.map((t) => t.title),
+          unorderedEquals(['open', 'done']));
     });
   });
 
@@ -96,6 +98,13 @@ void main() {
       expect(await repo.getById(saved.id!), saved);
       expect(controller.tasks, contains(saved));
       expect(notifications, 1);
+    });
+
+    test('add can give the new task a location', () async {
+      final saved =
+          await controller.add(title: 'On the map', location: GeoPoint(1, 2));
+      expect(saved.location, GeoPoint(1, 2));
+      expect(controller.locatedTasks, contains(saved));
     });
 
     test('save updates an existing task', () async {

@@ -72,6 +72,32 @@ void main() {
     expect(markerFor(3), findsOneWidget);
   });
 
+  testWidgets('bottom-left badge counts tasks without a location',
+      (tester) async {
+    await pumpMap(tester, [
+      seed(1, 'on map', at: helsinki),
+      seed(2, 'list only'),
+      seed(3, 'also list only', done: true),
+    ]);
+
+    final badge = find.byKey(const Key('missingLocationBadge'));
+    expect(badge, findsOneWidget);
+    await tester.tap(badge);
+    await tester.pumpAndSettle();
+    expect(find.text('2 tasks without locations'), findsOneWidget);
+
+    // It sits in the bottom-left corner of the map.
+    final mapRect = tester.getRect(find.byType(FlutterMap));
+    final badgeRect = tester.getRect(badge);
+    expect(badgeRect.left - mapRect.left, lessThan(24));
+    expect(mapRect.bottom - badgeRect.bottom, lessThan(24));
+  });
+
+  testWidgets('no badge when every task is on the map', (tester) async {
+    await pumpMap(tester, [seed(1, 'on map', at: helsinki)]);
+    expect(find.byKey(const Key('missingLocationBadge')), findsNothing);
+  });
+
   testWidgets('marker state follows the task (overdue, done)', (tester) async {
     await pumpMap(tester, [
       seed(1, 'late', at: helsinki, due: DateTime(2026, 11, 1)),

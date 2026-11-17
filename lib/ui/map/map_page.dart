@@ -9,6 +9,7 @@ import 'base_map_layer.dart';
 import 'geo_point_latlng.dart';
 import 'initial_map_view.dart';
 import 'map_config.dart';
+import 'missing_location_badge.dart';
 import 'quest_details_sheet.dart';
 import 'quest_marker.dart';
 
@@ -16,6 +17,8 @@ import 'quest_marker.dart';
 ///
 /// Layers, bottom to top: the base map ([baseLayer]), quest markers, and
 /// the attribution button. Tapping a marker opens [QuestDetailsSheet].
+/// A [MissingLocationBadge] in the bottom-left corner counts the tasks that
+/// have no location and so aren't on the map.
 class MapPage extends StatelessWidget {
   const MapPage({
     super.key,
@@ -38,10 +41,23 @@ class MapPage extends StatelessWidget {
       // Wait for the first task load, so the initial camera can frame the
       // quests instead of jumping once they arrive.
       body: controller.hasLoaded
-          ? _QuestMap(
-              tasks: controller.locatedTasks,
-              baseLayer: baseLayer,
-              now: clock(),
+          ? Stack(
+              children: [
+                _QuestMap(
+                  tasks: controller.locatedTasks,
+                  baseLayer: baseLayer,
+                  now: clock(),
+                ),
+                // Bottom-left, because the attribution button sits
+                // bottom-right.
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: MissingLocationBadge(
+                    count: controller.unlocatedTasks.length,
+                  ),
+                ),
+              ],
             )
           : const Center(child: CircularProgressIndicator()),
     );

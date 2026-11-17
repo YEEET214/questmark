@@ -28,6 +28,8 @@ made.
 | R11 | Detailed regions downloadable separately; offer the user's current region first, and download only with their permission | 8b |
 | R12 | Unit tests for every feature | all |
 | R13 | A branch per feature, detailed commits, merge to `main`, push | all |
+| R14 | Map zoom in/out buttons (small, Google-Maps-like) | 4 |
+| R15 | Task list: search, filter and sort; completing a task must not move it away | 4b |
 
 ---
 
@@ -446,6 +448,57 @@ zoom out to see all quests.
   the build with a message instead of installing silently. The user
   decided to **keep** CMake 3.22.1, since it's needed to build the app.
 
+### D16. Task list search, filters and sorting (Phase 4b, planned)
+*Specified by the user during the PR #4 review. Not built yet.*
+
+**Problem:** ticking a task moves it straight into the Completed section,
+so a wrongly ticked task has to be hunted down to untick it.
+**Decision:** don't move tasks at all. There is one list where completing
+a task only strikes it through in place. Which tasks are shown is
+controlled by filters. (A 3-second delay before moving was considered and
+rejected: the task would still jump away.)
+
+**Filters** (user's specification):
+* Status, one of: **All** (default) · **Completed** · **Not completed** ·
+  **Overdue**.
+* **Date created**: before a date, after a date, or between a start and an
+  end date.
+* **Due date**: before / after / between.
+* **Date completed**: before / after / between.
+* The date filters combine with the status filter and with each other
+  (e.g. "Not completed, due between 1 and 15 Dec"). Ranges are whole local
+  calendar days and include both ends.
+* **Search** by text in the title and description (requested earlier,
+  in-memory, no network).
+
+**Sorting** (user's specification), each **ascending or descending**:
+* **Alphabetical** (title, case-insensitive).
+* **Date created.**
+* **Due date.**
+* **Date completed.**
+* Tasks with no value for the chosen field (no due date / not completed)
+  go **last in both directions**, so they never push the relevant tasks
+  off-screen.
+
+**Design notes:**
+* **New column `completed_at`** (schema v2, the first real migration). It
+  is set when a task is ticked and cleared when it's unticked. Tasks
+  completed before v2 have no completion date, so the "date completed"
+  filters and sort treat them as unknown (they sort last).
+* **Just-ticked tasks stay visible:** with a filter such as "Not
+  completed", a task you just ticked stays in view, struck through, until
+  you change the filter or leave the page. An **Undo** snackbar is shown
+  too, so an accidental tick is always easy to reverse.
+* **The filter and sort rules are a pure Dart class** (`TaskQuery`),
+  applied to the in-memory list and unit-tested on its own. The
+  repository's SQL "done last" ordering is dropped, because the user's
+  chosen sort decides the order.
+* **Scope of change:** the list page's body (sections → one list + search
+  field + filter/sort controls), the repository ordering, and schema v2.
+  The task tile, editor, map and details sheet are unchanged.
+* **Numbered "4b"** so that the later phases keep their numbers, because
+  code comments and decisions already refer to them (e.g. "Phase 8a").
+
 ---
 
 ## 4. Phases
@@ -460,7 +513,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted | focus controller, button hidden without location, tab switch |
+| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller) | focus controller, button hidden without location, tab switch, zoom buttons and limits |
+| **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |

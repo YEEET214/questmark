@@ -17,6 +17,9 @@ QuestMark is a Flutter/Dart to-do app. Tasks can have a location and are shown o
 - **Never delete branches on GitHub**, even after their PR is merged. They are kept so the app's development history can be viewed. Never use `gh pr merge --delete-branch`, `git push --delete` or `git push origin :<branch>`, and keep the repo setting "Automatically delete head branches" off.
 - **Ask the user for permission before installing, uninstalling, upgrading or otherwise modifying anything on their system** outside this repository. This covers system tools and CLIs (e.g. GitHub CLI), SDKs (`flutter upgrade`, Android SDK components), global packages, PATH or environment variables, and global git/IDE config. Say what will change and why, and wait for a yes. Project-local changes (e.g. `flutter pub add` editing pubspec.yaml) are part of normal work and don't need this.
 - `gh` is installed but not on the bash PATH: call it as `"/c/Program Files/GitHub CLI/gh.exe"` (bash) or `& "C:\Program Files\GitHub CLI\gh.exe"` (PowerShell). It is already authenticated.
+- Gradle must never install SDK components on its own: `android/gradle.properties` sets `android.builder.sdkDownload=false`. If a build fails because a component (CMake, NDK, platform) is missing, ask the user before installing it. Widget tests must not hit the network: pass `mapBaseLayer: const SizedBox.shrink()` to `QuestMarkApp`, or `baseLayer:` to `MapPage`.
+- **Emulator:** the user's Android emulator is "MySmallPhone" (`emulator-5554`, 720x1280). **Never start or stop the emulator yourself; it sometimes crashes.** When you want to test on it, ask the user to start it and wait for their go-ahead. Once they say it's running, `flutter run -d emulator-5554` may be used. Screenshots: `"$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe" -s emulator-5554 exec-out screencap -p > shot.png` (save in the scratchpad).
+- Temporary debug-only developer tools live in `lib/dev/` (bug icon in the Quests app bar: add/remove "[Demo] " quests). They must be removed before release (PLAN.md section 5).
 - Targets are Android **and** iOS. Development is on Windows, so iOS config (Info.plist etc.) must be written but cannot be built here.
 - Explain design choices and the reasoning behind them to the user, and record significant ones in the PLAN.md decision log.
 
@@ -39,7 +42,7 @@ Layering: **UI → state (`ChangeNotifier` via `provider`) → repositories/serv
 
 - `lib/models`, `lib/data` (sqflite helper + versioned migrations + repositories), `lib/services`, `lib/state`, `lib/ui/{tasks,map,offline}`.
 - SQLite tests use `sqflite_common_ffi` with an in-memory database, so they run under plain `flutter test` without an emulator.
-- Map: `flutter_map` + `vector_map_tiles`, drawing **OpenFreeMap vector tiles** (OSM data). Markers are Flutter widgets. List → map navigation goes through a shared `MapFocusController`, not direct widget access.
+- Map: `flutter_map` 8.3.2 + `flutter_map_vector_tiles` 2.11.0 (exact pins; package use confined to `lib/ui/map/base_map_layer.dart`), drawing **OpenFreeMap vector tiles** (OSM data). Markers are Flutter widgets. List → map navigation goes through a shared `MapFocusController`, not direct widget access.
 - GPS: `geolocator`, foreground position stream only.
 - Offline maps: a bundled zoom 0–5 world MBTiles asset (copied to app storage on first launch), plus user-approved region downloads (zoom 6–14, overzoomed beyond 14) into an app-managed SQLite tile store with a `regions` table. Tile lookup order: downloaded regions → online/cached tiles → bundled world map.
 

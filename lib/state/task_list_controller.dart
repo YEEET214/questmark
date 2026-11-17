@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/task_repository.dart';
+import '../models/geo_point.dart';
 import '../models/task.dart';
 
 /// App-wide task state, shared by the list page and (from phase 3) the map.
@@ -35,6 +36,11 @@ class TaskListController extends ChangeNotifier {
   /// Tasks that should appear on the map.
   List<Task> get locatedTasks => _tasks.where((t) => t.hasLocation).toList();
 
+  /// Tasks with no location: list-only, not shown on the map. The map
+  /// shows their count as a reminder.
+  List<Task> get unlocatedTasks =>
+      _tasks.where((t) => !t.hasLocation).toList();
+
   bool get isLoading => _isLoading;
 
   /// `true` once the first load has finished (successfully or not). Lets
@@ -67,11 +73,13 @@ class TaskListController extends ChangeNotifier {
     required String title,
     String? description,
     DateTime? dueAt,
+    GeoPoint? location,
   }) async {
     final saved = await _repository.insert(Task(
       title: title,
       description: description,
       dueAt: dueAt,
+      location: location,
       createdAt: _clock(),
     ));
     await _refresh();

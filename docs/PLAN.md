@@ -28,6 +28,11 @@ made.
 | R11 | Detailed regions downloadable separately; offer the user's current region first, and download only with their permission | 8b |
 | R12 | Unit tests for every feature | all |
 | R13 | A branch per feature, detailed commits, merge to `main`, push | all |
+| R14 | Map zoom in/out buttons (small, Google-Maps-like) | 4 |
+| R15 | Task list: search, filter and sort; completing a task must not move it away | 4b |
+| R16 | Completed tasks hidden on the map by default; a toggle button shows them | 4 |
+| R17 | Recycle bin: deleted tasks are kept 30 days and can be restored, then deleted permanently | 4c |
+| R18 | "Delete all completed tasks" moves them all to the recycle bin, after a Yes/No confirmation | 4c |
 
 ---
 
@@ -98,7 +103,8 @@ tasks(
 )
 ```
 * Location is **optional**. A task without coordinates appears only in the
-  list, and its "show on map" button is disabled. Latitude and longitude are
+  list, and it has **no** "show on map" button until it is given a location
+  (user decision). Latitude and longitude are
   either both set or both null; the model enforces this.
 * `address` is stored next to the coordinates. This is a cache: once an
   address has been geocoded, we never ask Nominatim for it again (see D6).
@@ -191,9 +197,23 @@ draws itself. This turns out to suit our needs well:
   needs a server, which is out of scope for this project.
 
 ### D5. Map widget: `flutter_map` + vector-tile plugin
-* **Choice:** `flutter_map` with `vector_map_tiles` (MapLibre/OpenMapTiles
-  style support). The exact versions that work together are pinned in
-  Phase 3.
+* **Choice (revised in Phase 3):** `flutter_map` **8.3.2** +
+  `flutter_map_vector_tiles` **2.11.0**, pinned to exact versions.
+  * The plan originally named `vector_map_tiles`. Its latest stable release
+    (8.0.0, 2024) only works with `flutter_map` 7, and its `flutter_map` 8
+    support exists only as betas (9.0.0-beta.13).
+  * `flutter_map_vector_tiles` is stable, supports `flutter_map` 8, and
+    lists OpenFreeMap as a supported provider. Its built-in disk cache
+    (in a folder the OS doesn't clear, with a lifetime per tile) covers
+    the persistent-cache requirement. It has a pluggable tile-source
+    interface (`resolveProvider`) and an MBTiles companion package, which
+    is exactly what Phase 8's offline maps need.
+  * **Risk:** it's young (first release August 2026) with a single
+    maintainer. Mitigation: exact version pins, and all package use stays
+    in `lib/ui/map/base_map_layer.dart`, so it could be swapped out.
+  * Checked against the real OpenFreeMap "Liberty" style: one vector
+    source (`openmaptiles`, data up to zoom 14), sprites and fonts load,
+    and its attribution matches ours.
 * **Why:** `flutter_map` is pure Dart and works the same on Android and iOS.
   Markers are ordinary Flutter widgets, so animated quest markers are easy,
   and we control exactly how tiles are fetched and stored.
@@ -271,11 +291,17 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 | Completed task | grey **✓**, smaller, no animation |
 | Player (GPS) | blue arrow/dot with an accuracy circle |
 
+**Completed quests are hidden on the map by default** (user decision, PR #4
+review). A toggle button on the map shows or hides them; see D17.
+
 Off-screen direction arrows were **dropped** (user decision). The user can
 zoom out to see all quests.
 
 ### D10. "Show on map" from the list (R5)
-* Each task in the list that has a location gets a map button.
+* Each task in the list that has a location gets a map button. Tasks
+  without a location get **no** button at all, rather than a disabled one
+  (user decision, PR #4 review). The button appears once the task is
+  given a location.
 * Tapping it switches to the Map tab and animates the camera to centre on
   the task at a sensible zoom (~16), with that marker highlighted.
 * Implemented as a shared `MapFocusController` (a ChangeNotifier holding a
@@ -310,7 +336,7 @@ zoom out to see all quests.
   feature's branch stays available for viewing the app's history.
 
 ### D13. Platforms: Android and iOS
-* All chosen packages (sqflite, geolocator, flutter_map, vector_map_tiles,
+* All chosen packages (sqflite, geolocator, flutter_map, flutter_map_vector_tiles,
   http, provider) support both platforms.
 * **Limitation:** development happens on Windows, and iOS apps can only be
   built and run on a Mac with Xcode. We will write the iOS configuration
@@ -363,6 +389,164 @@ zoom out to see all quests.
   is already covered by its own tests. Clocks are injected, so tests about
   "today" and "overdue" are deterministic.
 
+### D15. Map page and quest markers (Phase 3)
+* **Where the map comes from:** the OpenFreeMap "Liberty" style is loaded
+  once via `StyleReader`, with our `QuestMark/1.0.0` User-Agent. The
+  package sends that header with the style request and with every tile,
+  sprite and font request it makes. The style bundle is cached on disk, so
+  after the first load the style works offline.
+* **Tile cache:** 100 MB, 30-day lifetime, in the app support folder. A
+  tile already seen is drawn from disk, so repeat views cost OpenFreeMap
+  nothing. If the network fails on first launch, a "Couldn't load the map"
+  banner with Retry is shown. Phase 8a's bundled world map will close that
+  gap.
+* **Attribution:** "OpenFreeMap · © OpenMapTiles · Data © OpenStreetMap
+  contributors", in `flutter_map`'s collapsible attribution button. The
+  data licence (ODbL) requires it.
+* **Starting view** (`InitialMapView`, pure and unit-tested): no quests →
+  the whole world; one quest (or all at one spot) → centred on it at
+  zoom 15; several → zoomed to fit them all (capped at zoom 15). The map
+  waits for the first task load so it doesn't jump, and afterwards the
+  camera only moves when the user moves it.
+* **No rotation:** pinch-rotate is disabled, so north stays up. A to-do
+  map doesn't need rotation, and accidental rotation is disorienting.
+* **Marker states** (`QuestMarkerKind.of`, pure and unit-tested): done →
+  small grey check; open and the due day has passed → red "!"; due today
+  or tomorrow → orange "!"; otherwise gold "!". Days are local calendar
+  days. Drawing order puts urgent markers on top: done < active <
+  due soon < overdue.
+* **Animation costs nothing while hidden:** open quests bob gently, but
+  the animation stops when the OS "remove animations" accessibility
+  setting is on, and when the map tab is hidden. HomeShell wraps each tab
+  in `TickerMode`, so the kept-alive map uses no CPU or battery while
+  you're on the list.
+* **Tapping a marker** opens a bottom sheet with the details and
+  Complete/Reopen and Edit buttons. Edit, delete and undo are shared with
+  the list page through `lib/ui/tasks/task_actions.dart`, so both screens
+  behave the same.
+* **Accessibility:** each marker is a screen-reader button labelled e.g.
+  "Quest, overdue: Buy milk".
+* **Guard tests:** a test fails if any code line references
+  `tile.openstreetmap.org`, and another checks that the User-Agent
+  version matches `pubspec.yaml`.
+* **"Tasks without locations" badge** (user request, PR #4 review):
+  location is optional, so the map shows how many tasks are *not* on it.
+  A small circle with "!" sits in the bottom-left corner (the attribution
+  button is bottom-right). Tapping it expands it into a rounded rectangle
+  reading "x tasks without locations" (correct singular/plural), and
+  tapping again collapses it. It starts collapsed so it covers little of
+  the map, and it's hidden when every task has a location. It counts all
+  tasks without a location, completed ones included, exactly as
+  requested.
+* **Temporary developer tools** (user request): a bug icon in the Quests
+  app bar, in **debug builds only** (`kDebugMode`). It adds or removes
+  hardcoded demo quests in central Helsinki (titles start with
+  "[Demo] "). They cover every marker state (gold, orange due today, red
+  overdue, grey done, gold due later), plus two list-only quests for the
+  badge. This lets us check the real map visually on the emulator before
+  locations can be entered in Phases 6–7. To be removed before release
+  (section 5).
+* **Build note:** `path_provider_android` (used by the map packages)
+  depends on `jni`, which compiles native code with CMake. The first
+  build made Gradle download CMake 3.22.1 automatically. To keep system
+  changes in the user's hands, `android/gradle.properties` now sets
+  `android.builder.sdkDownload=false`, so a missing SDK component fails
+  the build with a message instead of installing silently. The user
+  decided to **keep** CMake 3.22.1, since it's needed to build the app.
+
+### D16. Task list search, filters and sorting (Phase 4b, planned)
+*Specified by the user during the PR #4 review. Not built yet.*
+
+**Problem:** ticking a task moves it straight into the Completed section,
+so a wrongly ticked task has to be hunted down to untick it.
+**Decision:** don't move tasks at all. There is one list where completing
+a task only strikes it through in place. Which tasks are shown is
+controlled by filters. (A 3-second delay before moving was considered and
+rejected: the task would still jump away.)
+
+**Filters** (user's specification):
+* Status, one of: **All** (default) · **Completed** · **Not completed** ·
+  **Overdue**.
+* **Date created**: before a date, after a date, or between a start and an
+  end date.
+* **Due date**: before / after / between.
+* **Date completed**: before / after / between.
+* The date filters combine with the status filter and with each other
+  (e.g. "Not completed, due between 1 and 15 Dec"). Ranges are whole local
+  calendar days and include both ends.
+* **Search** by text in the title and description (requested earlier,
+  in-memory, no network).
+
+**Sorting** (user's specification), each **ascending or descending**:
+* **Alphabetical** (title, case-insensitive).
+* **Date created.**
+* **Due date.**
+* **Date completed.**
+* Tasks with no value for the chosen field (no due date / not completed)
+  go **last in both directions**, so they never push the relevant tasks
+  off-screen.
+
+**Design notes:**
+* **New column `completed_at`** (schema v2, the first real migration). It
+  is set when a task is ticked and cleared when it's unticked. Tasks
+  completed before v2 have no completion date, so the "date completed"
+  filters and sort treat them as unknown (they sort last).
+* **Just-ticked tasks stay visible:** with a filter such as "Not
+  completed", a task you just ticked stays in view, struck through, until
+  you change the filter or leave the page. An **Undo** snackbar is shown
+  too, so an accidental tick is always easy to reverse.
+* **The filter and sort rules are a pure Dart class** (`TaskQuery`),
+  applied to the in-memory list and unit-tested on its own. The
+  repository's SQL "done last" ordering is dropped, because the user's
+  chosen sort decides the order.
+* **Scope of change:** the list page's body (sections → one list + search
+  field + filter/sort controls), the repository ordering, and schema v2.
+  The task tile, editor, map and details sheet are unchanged.
+* **Numbered "4b"** so that the later phases keep their numbers, because
+  code comments and decisions already refer to them (e.g. "Phase 8a").
+
+### D17. Completed quests hidden on the map by default (Phase 4, planned)
+*User decision during the PR #4 review.*
+* By default the map shows **only open quests**, so finished quests don't
+  clutter it.
+* A small **toggle button** on the map (next to the zoom buttons) shows or
+  hides completed quests. Its icon and tooltip say which state it's in
+  ("Show completed" / "Hide completed").
+* The choice lasts while the app is open. Whether it should be remembered
+  across restarts can be decided when it's built.
+* Completed quests, when shown, keep the grey check marker (D9).
+* The "tasks without locations" badge is unaffected: it still counts all
+  tasks without a location.
+
+### D18. Recycle bin and "Delete all completed tasks" (Phase 4c, planned)
+*User decision during the PR #4 review.*
+* **Deleting no longer destroys a task.** It moves the task to the
+  **recycle bin**, where it stays for **30 days**. In the bin the user can
+  **restore** it (it returns exactly as it was, with the same id) or
+  **delete it permanently** (with a confirmation).
+* **Implementation: a soft delete.** A new `deleted_at` column (schema v3)
+  marks a task as deleted. Normal queries, and therefore the list and the
+  map, skip deleted tasks. The bin lists them, newest deleted first,
+  showing how many days each has left.
+* **Purge:** tasks deleted more than 30 days ago are removed permanently
+  when the app starts and when the bin is opened. There is no background
+  job, so no battery cost and no extra permissions.
+* **Undo stays.** The swipe/delete snackbar now reads "Moved to recycle
+  bin" with **Undo**, which simply clears `deleted_at`. This replaces
+  Phase 2's re-insert with a new id: the task keeps its id.
+* **"Delete all completed tasks"**, in the Quests page's menu:
+  * First a confirmation dialog: **"Are you sure? This will move all
+    completed tasks to the recycle bin."** with **Yes** and **No**
+    buttons. **Yes** moves every completed task to the bin; **No** closes
+    the dialog and does nothing.
+  * Afterwards a snackbar says how many tasks were moved.
+  * If there are no completed tasks, the action is disabled.
+* **The bin is opened** from the Quests page's menu ("Recycle bin"), on its
+  own page.
+* **Ordering with 4b:** 4b adds schema v2 (`completed_at`); 4c adds v3
+  (`deleted_at`). They are separate migrations appended in order (the
+  append-only rule in D3).
+
 ---
 
 ## 4. Phases
@@ -375,9 +559,11 @@ push branch → open PR → progress report → you review → merge PR into
 |-------|--------|--------|-------------|-----------|
 | **0. Foundation** | ✅ Done (PR #1) | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
-| **2. Task list UI** | 🚧 In progress | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
-| **3. Map + quest markers** | ⬜ Planned | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
+| **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
+| **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
+| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
+| **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
+| **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
@@ -388,5 +574,10 @@ push branch → open PR → progress report → you review → merge PR into
 ---
 
 ## 5. Open questions
+
+**Before release (to do when the app is finished):**
+* Remove the temporary developer tools: `lib/dev/`, the `DevToolsButton`
+  in the Quests app bar, and `test/dev/`.
+* Replace the template app id `com.example.questmark`.
 * None blocking right now. To revisit in Phase 8a: the bundled world-map
   size, and whether zoom 0–5 fits the size goal.

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../dev/dev_tools.dart';
 import '../../models/task.dart';
 import '../../state/task_list_controller.dart';
 import '../formatting.dart';
-import 'task_editor_page.dart';
+import 'task_actions.dart';
 
 /// Shows all tasks: active ones first, then a "Completed" section.
 ///
@@ -23,9 +24,13 @@ class TaskListPage extends StatelessWidget {
     final controller = context.watch<TaskListController>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Quests')),
+      appBar: AppBar(
+        title: const Text('Quests'),
+        // TEMPORARY: debug-only developer tools (removed before release).
+        actions: const [DevToolsButton()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(context, null),
+        onPressed: () => openTaskEditor(context, null),
         icon: const Icon(Icons.add),
         label: const Text('New quest'),
       ),
@@ -63,85 +68,24 @@ class TaskListPage extends StatelessWidget {
       // Leaves room so the last tile isn't hidden behind the FAB.
       padding: const EdgeInsets.only(bottom: 88),
       children: [
-        for (final t in active) _TaskTile(task: t, now: now, page: this),
+        for (final t in active) _TaskTile(task: t, now: now),
         if (completed.isNotEmpty) ...[
           _SectionHeader('Completed (${completed.length})'),
-          for (final t in completed) _TaskTile(task: t, now: now, page: this),
+          for (final t in completed) _TaskTile(task: t, now: now),
         ],
       ],
     );
   }
-
-  Future<void> _openEditor(BuildContext context, Task? task) async {
-    final controller = context.read<TaskListController>();
-    final result = await Navigator.of(context).push<TaskEditorResult>(
-      MaterialPageRoute(builder: (_) => TaskEditorPage(initial: task)),
-    );
-    if (result == null || !context.mounted) return;
-
-    switch (result) {
-      case TaskEditorSaved(:final title, :final description, :final dueAt):
-        await _guard(context, () async {
-          if (task == null) {
-            await controller.add(
-                title: title, description: description, dueAt: dueAt);
-          } else {
-            await controller.save(task.copyWith(
-              title: title,
-              description: () => description,
-              dueAt: () => dueAt,
-            ));
-          }
-        });
-      case TaskEditorDeleted():
-        if (task != null) await _deleteWithUndo(context, task);
-    }
-  }
-
-  Future<bool> _deleteWithUndo(BuildContext context, Task task) async {
-    final controller = context.read<TaskListController>();
-    final messenger = ScaffoldMessenger.of(context);
-    return _guard(context, () async {
-      final deleted = await controller.delete(task);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text('Deleted "${deleted.title}"'),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () => controller.restore(deleted),
-          ),
-        ));
-    });
-  }
-
-  /// Runs a change and reports failures in a snackbar instead of crashing.
-  /// Returns whether it succeeded.
-  static Future<bool> _guard(
-      BuildContext context, Future<void> Function() action) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await action();
-      return true;
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Something went wrong: $e')),
-      );
-      return false;
-    }
-  }
 }
 
 class _TaskTile extends StatelessWidget {
-  const _TaskTile({required this.task, required this.now, required this.page});
+  const _TaskTile({required this.task, required this.now});
 
   final Task task;
   final DateTime now;
-  final TaskListPage page;
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.read<TaskListController>();
     final theme = Theme.of(context);
 
     return Dismissible(
@@ -158,12 +102,11 @@ class _TaskTile extends StatelessWidget {
       // delete is asynchronous. Awaiting it here means the list is already
       // rebuilt without the item when the animation ends, and if the
       // delete fails the tile simply slides back.
-      confirmDismiss: (_) => page._deleteWithUndo(context, task),
+      confirmDismiss: (_) => deleteTaskWithUndo(context, task),
       child: ListTile(
         leading: Checkbox(
           value: task.isDone,
-          onChanged: (done) => TaskListPage._guard(
-              context, () => controller.setDone(task, done ?? false)),
+          onChanged: (done) => setTaskDone(context, task, done ?? false),
         ),
         title: Text(
           task.title,
@@ -175,7 +118,7 @@ class _TaskTile extends StatelessWidget {
               : null,
         ),
         subtitle: _subtitle(context),
-        onTap: () => page._openEditor(context, task),
+        onTap: () => openTaskEditor(context, task),
       ),
     );
   }

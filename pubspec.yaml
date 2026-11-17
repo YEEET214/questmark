@@ -37,6 +37,9 @@ dependencies:
   provider: ^6.1.5+1
   sqflite: ^2.4.6
   path: ^1.9.1
+  flutter_map: 8.3.2
+  flutter_map_vector_tiles: 2.11.0
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:

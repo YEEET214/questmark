@@ -5,6 +5,7 @@ import 'data/task_repository.dart';
 import 'state/navigation_controller.dart';
 import 'state/task_list_controller.dart';
 import 'ui/home_shell.dart';
+import 'ui/map/base_map_layer.dart';
 import 'ui/theme.dart';
 
 /// Root widget. Provides the app-wide state objects and the theme.
@@ -17,12 +18,17 @@ class QuestMarkApp extends StatelessWidget {
     super.key,
     required this.taskRepository,
     this.navigationController,
+    this.mapBaseLayer = const OpenFreeMapLayer(),
   });
 
   final TaskRepository taskRepository;
 
   /// Optional pre-built controller, mainly for tests.
   final NavigationController? navigationController;
+
+  /// The map's base layer. Tests pass an empty widget so no map tiles are
+  /// loaded from the network.
+  final Widget mapBaseLayer;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +46,7 @@ class QuestMarkApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: buildQuestTheme(Brightness.light),
         darkTheme: buildQuestTheme(Brightness.dark),
-        home: const HomeShell(),
+        home: HomeShell(mapBaseLayer: mapBaseLayer),
       ),
     );
   }

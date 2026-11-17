@@ -282,10 +282,11 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 * Foreground only. Background tracking isn't needed and would require much
   stricter Play Store / App Store permissions.
 * The map has a "re-centre on me" button and an optional follow mode.
+* On start-up the map centres on the user (D19).
 
 ### D9. Quest-marker visual language
 | State | Marker |
-|-------|--------|--------|-------------|-----------|
+|-------|--------|
 | Active task | golden **!** in a shield/diamond, gentle bobbing animation |
 | Task due soon / overdue | orange / red tint |
 | Completed task | grey **✓**, smaller, no animation |
@@ -332,8 +333,10 @@ zoom out to see all quests.
 * Why PRs: they give one place to review the full diff of a feature, keep a
   written record of each feature on GitHub, and make sure nothing reaches
   `main` without the user seeing it.
-* Branches are **never deleted on GitHub**, even after merging, so every
-  feature's branch stays available for viewing the app's history.
+* **Only the user deletes branches**, manually, after merging a PR.
+  Claude never deletes branches, on GitHub or locally.
+* Docs-only changes, such as plan updates, use a `docs/<short-name>`
+  branch with their own PR.
 
 ### D13. Platforms: Android and iOS
 * All chosen packages (sqflite, geolocator, flutter_map, flutter_map_vector_tiles,
@@ -547,6 +550,34 @@ rejected: the task would still jump away.)
   (`deleted_at`). They are separate migrations appended in order (the
   append-only rule in D3).
 
+### D19. Map starts centred on the user (Phase 5, planned)
+*User decision, after PR #4.* When the app starts, the map's camera is
+chosen in this order:
+1. **Current GPS position**, if location services are on and permission is
+   granted: centre on the user at street level (zoom ~15).
+2. **Last known location**, if there's no current fix (location services
+   off, permission denied, or no fix yet): centre there.
+3. **Neither available:** the current behaviour (D15): fit all quests, or
+   show the whole world if there are none.
+
+**Design notes:**
+* **Our own saved "last known location".** The OS's cached position
+  (`geolocator.getLastKnownPosition`) is often unavailable when location
+  services are turned off, which is exactly the case we need it for. So
+  the app also saves every GPS fix it receives (throttled, e.g. at most
+  once a minute) in SQLite, and uses that as the fallback.
+* **Don't block the map waiting for GPS.** A first fix can take seconds.
+  The map opens straight away with the best view available (last known
+  location, else fit the quests). When the first GPS fix arrives, the
+  camera glides to the user, **but only if the user hasn't touched the
+  map yet**. This is the one exception to D15's "the camera only moves
+  when the user moves it".
+* **Privacy:** the saved location never leaves the phone (local SQLite,
+  like everything else), and only the latest position is kept, not a
+  history.
+* Fits with Phase 4: "show on map" requests still take priority over the
+  start-up view.
+
 ---
 
 ## 4. Phases
@@ -560,11 +591,11 @@ push branch → open PR → progress report → you review → merge PR into
 | **0. Foundation** | ✅ Done (PR #1) | `feature/00-foundation` | `provider` (later dependencies are added in the phase that first needs them, so version conflicts surface where they can be resolved), theme, bottom-nav shell with empty List and Map pages, Android/iOS permission entries | app boots, navigation switches pages |
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
-| **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
+| **3. Map + quest markers** | ✅ Done (PR #4) | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
 | **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
 | **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
-| **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
+| **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |

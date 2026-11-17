@@ -30,6 +30,9 @@ made.
 | R13 | A branch per feature, detailed commits, merge to `main`, push | all |
 | R14 | Map zoom in/out buttons (small, Google-Maps-like) | 4 |
 | R15 | Task list: search, filter and sort; completing a task must not move it away | 4b |
+| R16 | Completed tasks hidden on the map by default; a toggle button shows them | 4 |
+| R17 | Recycle bin: deleted tasks are kept 30 days and can be restored, then deleted permanently | 4c |
+| R18 | "Delete all completed tasks" moves them all to the recycle bin, after a Yes/No confirmation | 4c |
 
 ---
 
@@ -288,6 +291,9 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 | Completed task | grey **✓**, smaller, no animation |
 | Player (GPS) | blue arrow/dot with an accuracy circle |
 
+**Completed quests are hidden on the map by default** (user decision, PR #4
+review). A toggle button on the map shows or hides them; see D17.
+
 Off-screen direction arrows were **dropped** (user decision). The user can
 zoom out to see all quests.
 
@@ -499,6 +505,48 @@ rejected: the task would still jump away.)
 * **Numbered "4b"** so that the later phases keep their numbers, because
   code comments and decisions already refer to them (e.g. "Phase 8a").
 
+### D17. Completed quests hidden on the map by default (Phase 4, planned)
+*User decision during the PR #4 review.*
+* By default the map shows **only open quests**, so finished quests don't
+  clutter it.
+* A small **toggle button** on the map (next to the zoom buttons) shows or
+  hides completed quests. Its icon and tooltip say which state it's in
+  ("Show completed" / "Hide completed").
+* The choice lasts while the app is open. Whether it should be remembered
+  across restarts can be decided when it's built.
+* Completed quests, when shown, keep the grey check marker (D9).
+* The "tasks without locations" badge is unaffected: it still counts all
+  tasks without a location.
+
+### D18. Recycle bin and "Delete all completed tasks" (Phase 4c, planned)
+*User decision during the PR #4 review.*
+* **Deleting no longer destroys a task.** It moves the task to the
+  **recycle bin**, where it stays for **30 days**. In the bin the user can
+  **restore** it (it returns exactly as it was, with the same id) or
+  **delete it permanently** (with a confirmation).
+* **Implementation: a soft delete.** A new `deleted_at` column (schema v3)
+  marks a task as deleted. Normal queries, and therefore the list and the
+  map, skip deleted tasks. The bin lists them, newest deleted first,
+  showing how many days each has left.
+* **Purge:** tasks deleted more than 30 days ago are removed permanently
+  when the app starts and when the bin is opened. There is no background
+  job, so no battery cost and no extra permissions.
+* **Undo stays.** The swipe/delete snackbar now reads "Moved to recycle
+  bin" with **Undo**, which simply clears `deleted_at`. This replaces
+  Phase 2's re-insert with a new id: the task keeps its id.
+* **"Delete all completed tasks"**, in the Quests page's menu:
+  * First a confirmation dialog: **"Are you sure? This will move all
+    completed tasks to the recycle bin."** with **Yes** and **No**
+    buttons. **Yes** moves every completed task to the bin; **No** closes
+    the dialog and does nothing.
+  * Afterwards a snackbar says how many tasks were moved.
+  * If there are no completed tasks, the action is disabled.
+* **The bin is opened** from the Quests page's menu ("Recycle bin"), on its
+  own page.
+* **Ordering with 4b:** 4b adds schema v2 (`completed_at`); 4c adds v3
+  (`deleted_at`). They are separate migrations appended in order (the
+  append-only rule in D3).
+
 ---
 
 ## 4. Phases
@@ -513,8 +561,9 @@ push branch → open PR → progress report → you review → merge PR into
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller) | focus controller, button hidden without location, tab switch, zoom buttons and limits |
+| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
 | **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
+| **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |

@@ -118,6 +118,15 @@ class _TaskTile extends StatelessWidget {
               : null,
         ),
         subtitle: _subtitle(context),
+        // Only tasks with a location get the button; the others have
+        // nothing to show (PLAN.md D10, user decision).
+        trailing: task.hasLocation
+            ? IconButton(
+                tooltip: 'Show on map',
+                icon: const Icon(Icons.travel_explore),
+                onPressed: () => showTaskOnMap(context, task),
+              )
+            : null,
         onTap: () => openTaskEditor(context, task),
       ),
     );

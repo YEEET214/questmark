@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
+import 'package:questmark/state/map_focus_controller.dart';
+import 'package:questmark/state/navigation_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
 import 'package:questmark/ui/tasks/task_editor_page.dart';
 import 'package:questmark/ui/tasks/task_list_page.dart';
@@ -27,6 +29,9 @@ void main() {
 
   /// Pumps the list page backed by a fake repository and waits for the
   /// first load to finish.
+  late MapFocusController focus;
+  late NavigationController nav;
+
   Future<FakeTaskRepository> pumpList(
     WidgetTester tester, [
     List<Task> tasks = const [],
@@ -34,8 +39,15 @@ void main() {
   ]) async {
     final repo = FakeTaskRepository(tasks);
     beforeLoad?.call(repo);
-    await tester.pumpWidget(ChangeNotifierProvider(
-      create: (_) => TaskListController(repo, clock: () => now)..load(),
+    focus = MapFocusController();
+    nav = NavigationController();
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+            create: (_) => TaskListController(repo, clock: () => now)..load()),
+        ChangeNotifierProvider.value(value: focus),
+        ChangeNotifierProvider.value(value: nav),
+      ],
       child: MaterialApp(home: TaskListPage(clock: () => now)),
     ));
     await tester.pumpAndSettle();
@@ -197,6 +209,47 @@ void main() {
       expect(find.byType(TaskEditorPage), findsNothing);
       expect(find.text('doomed'), findsNothing);
       expect(find.text('Undo'), findsOneWidget);
+    });
+  });
+
+  group('Show on map button', () {
+    testWidgets('only tasks with a location have the button', (tester) async {
+      await pumpList(tester, [
+        seed(1, 'on map', at: GeoPoint(60.17, 24.94)),
+        seed(2, 'list only'),
+      ]);
+      expect(find.byTooltip('Show on map'), findsOneWidget);
+      final button = find.byTooltip('Show on map');
+      final tile = find.ancestor(of: button, matching: find.byType(ListTile));
+      expect(
+          find.descendant(of: tile, matching: find.text('on map')), findsOneWidget);
+    });
+
+    testWidgets('tapping it focuses the task and switches to the Map tab',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'on map', at: GeoPoint(60.17, 24.94))]);
+
+      await tester.tap(find.byTooltip('Show on map'));
+      await tester.pump();
+
+      expect(nav.current, AppTab.map);
+      expect(focus.pendingRequest!.taskId, 1);
+      expect(focus.pendingRequest!.point, GeoPoint(60.17, 24.94));
+      expect(focus.highlightedTaskId, 1);
+    });
+
+    testWidgets('the button appears once a task gets a location',
+        (tester) async {
+      final repo = await pumpList(tester, [seed(1, 'later on map')]);
+      expect(find.byTooltip('Show on map'), findsNothing);
+
+      final controller = tester
+          .element(find.byType(TaskListPage))
+          .read<TaskListController>();
+      await controller.save(
+          (await repo.getById(1))!.copyWith(location: () => GeoPoint(1, 2)));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Show on map'), findsOneWidget);
     });
   });
 }

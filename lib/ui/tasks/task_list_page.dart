@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../dev/dev_tools.dart';
 import '../../models/task.dart';
 import '../../state/task_list_controller.dart';
 import '../formatting.dart';
@@ -23,7 +24,11 @@ class TaskListPage extends StatelessWidget {
     final controller = context.watch<TaskListController>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Quests')),
+      appBar: AppBar(
+        title: const Text('Quests'),
+        // TEMPORARY: debug-only developer tools (removed before release).
+        actions: const [DevToolsButton()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => openTaskEditor(context, null),
         icon: const Icon(Icons.add),

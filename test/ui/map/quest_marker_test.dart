@@ -70,4 +70,27 @@ void main() {
     await pumpMarker(tester, QuestMarkerKind.done);
     expect(tester.hasRunningAnimations, isFalse);
   });
+
+  testWidgets('highlighted marker is drawn larger with a halo and says so',
+      (tester) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(MaterialApp(
+      home: Center(
+        child: QuestMarker(
+            task: task, kind: QuestMarkerKind.active, highlighted: true),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const Key('questMarkerHalo')), findsOneWidget);
+    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.4);
+    expect(find.bySemanticsLabel('Quest: Buy milk, selected'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('not highlighted: normal size, no halo', (tester) async {
+    await pumpMarker(tester, QuestMarkerKind.active);
+    expect(find.byKey(const Key('questMarkerHalo')), findsNothing);
+    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1);
+  });
 }

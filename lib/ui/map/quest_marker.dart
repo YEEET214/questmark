@@ -72,15 +72,22 @@ class QuestMarker extends StatefulWidget {
     required this.task,
     required this.kind,
     this.onTap,
+    this.highlighted = false,
   });
 
   final Task task;
   final QuestMarkerKind kind;
   final VoidCallback? onTap;
 
+  /// Emphasised after "Show on map": drawn larger, with a white halo.
+  final bool highlighted;
+
   /// Size of the marker box handed to flutter_map. It includes headroom for
   /// the bobbing motion.
   static const double size = 48;
+
+  /// Box size for a highlighted marker (it's drawn 1.4x larger).
+  static const double highlightedSize = 68;
 
   @override
   State<QuestMarker> createState() => _QuestMarkerState();
@@ -127,9 +134,30 @@ class _QuestMarkerState extends State<QuestMarker>
     final kind = widget.kind;
     final colors = QuestMarkerColors.of(kind);
 
-    final Widget shape = kind == QuestMarkerKind.done
+    final Widget base = kind == QuestMarkerKind.done
         ? _DoneBadge(colors: colors)
         : _QuestDiamond(colors: colors);
+    final Widget shape = AnimatedScale(
+      scale: widget.highlighted ? 1.4 : 1,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutBack,
+      child: widget.highlighted
+          ? DecoratedBox(
+              key: const Key('questMarkerHalo'),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    blurRadius: 12,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: base,
+            )
+          : base,
+    );
 
     return Semantics(
       button: true,
@@ -161,7 +189,8 @@ class _QuestMarkerState extends State<QuestMarker>
       QuestMarkerKind.overdue => 'Quest, overdue',
       QuestMarkerKind.done => 'Completed quest',
     };
-    return '$state: ${widget.task.title}';
+    final selected = widget.highlighted ? ', selected' : '';
+    return '$state: ${widget.task.title}$selected';
   }
 }
 

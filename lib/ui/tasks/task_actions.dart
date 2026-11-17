@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/task.dart';
+import '../../state/map_focus_controller.dart';
+import '../../state/navigation_controller.dart';
 import '../../state/task_list_controller.dart';
 import 'task_editor_page.dart';
 
@@ -60,6 +62,13 @@ Future<bool> deleteTaskWithUndo(BuildContext context, Task task) async {
 Future<bool> setTaskDone(BuildContext context, Task task, bool done) {
   final controller = context.read<TaskListController>();
   return runGuarded(context, () => controller.setDone(task, done));
+}
+
+/// "Show on map": switches to the Map tab and asks the map to centre on
+/// [task] and highlight it. Only offered for tasks with a location.
+void showTaskOnMap(BuildContext context, Task task) {
+  context.read<MapFocusController>().focusOn(task);
+  context.read<NavigationController>().select(AppTab.map);
 }
 
 /// Runs a change and reports failures in a snackbar instead of crashing.

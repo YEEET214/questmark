@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'data/task_repository.dart';
+import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
 import 'state/task_list_controller.dart';
 import 'ui/home_shell.dart';
@@ -36,6 +37,9 @@ class QuestMarkApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider<NavigationController>(
           create: (_) => navigationController ?? NavigationController(),
+        ),
+        ChangeNotifierProvider<MapFocusController>(
+          create: (_) => MapFocusController(),
         ),
         ChangeNotifierProvider<TaskListController>(
           create: (_) => TaskListController(taskRepository)..load(),

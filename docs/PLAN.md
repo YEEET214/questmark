@@ -98,7 +98,8 @@ tasks(
 )
 ```
 * Location is **optional**. A task without coordinates appears only in the
-  list, and its "show on map" button is disabled. Latitude and longitude are
+  list, and it has **no** "show on map" button until it is given a location
+  (user decision). Latitude and longitude are
   either both set or both null; the model enforces this.
 * `address` is stored next to the coordinates. This is a cache: once an
   address has been geocoded, we never ask Nominatim for it again (see D6).
@@ -289,7 +290,10 @@ Off-screen direction arrows were **dropped** (user decision). The user can
 zoom out to see all quests.
 
 ### D10. "Show on map" from the list (R5)
-* Each task in the list that has a location gets a map button.
+* Each task in the list that has a location gets a map button. Tasks
+  without a location get **no** button at all, rather than a disabled one
+  (user decision, PR #4 review). The button appears once the task is
+  given a location.
 * Tapping it switches to the Map tab and animates the camera to centre on
   the task at a sensible zoom (~16), with that marker highlighted.
 * Implemented as a shared `MapFocusController` (a ChangeNotifier holding a
@@ -417,12 +421,30 @@ zoom out to see all quests.
 * **Guard tests:** a test fails if any code line references
   `tile.openstreetmap.org`, and another checks that the User-Agent
   version matches `pubspec.yaml`.
+* **"Tasks without locations" badge** (user request, PR #4 review):
+  location is optional, so the map shows how many tasks are *not* on it.
+  A small circle with "!" sits in the bottom-left corner (the attribution
+  button is bottom-right). Tapping it expands it into a rounded rectangle
+  reading "x tasks without locations" (correct singular/plural), and
+  tapping again collapses it. It starts collapsed so it covers little of
+  the map, and it's hidden when every task has a location. It counts all
+  tasks without a location, completed ones included, exactly as
+  requested.
+* **Temporary developer tools** (user request): a bug icon in the Quests
+  app bar, in **debug builds only** (`kDebugMode`). It adds or removes
+  hardcoded demo quests in central Helsinki (titles start with
+  "[Demo] "). They cover every marker state (gold, orange due today, red
+  overdue, grey done, gold due later), plus two list-only quests for the
+  badge. This lets us check the real map visually on the emulator before
+  locations can be entered in Phases 6–7. To be removed before release
+  (section 5).
 * **Build note:** `path_provider_android` (used by the map packages)
   depends on `jni`, which compiles native code with CMake. The first
   build made Gradle download CMake 3.22.1 automatically. To keep system
   changes in the user's hands, `android/gradle.properties` now sets
   `android.builder.sdkDownload=false`, so a missing SDK component fails
-  the build with a message instead of installing silently.
+  the build with a message instead of installing silently. The user
+  decided to **keep** CMake 3.22.1, since it's needed to build the app.
 
 ---
 
@@ -438,7 +460,7 @@ push branch → open PR → progress report → you review → merge PR into
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | 🚧 In progress | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items → Map tab, centred on the task, marker highlighted | focus controller, button disabled without location, tab switch |
+| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted | focus controller, button hidden without location, tab switch |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow | fake location stream moves the marker, permission-denied state |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
@@ -449,5 +471,10 @@ push branch → open PR → progress report → you review → merge PR into
 ---
 
 ## 5. Open questions
+
+**Before release (to do when the app is finished):**
+* Remove the temporary developer tools: `lib/dev/`, the `DevToolsButton`
+  in the Quests app bar, and `test/dev/`.
+* Replace the template app id `com.example.questmark`.
 * None blocking right now. To revisit in Phase 8a: the bundled world-map
   size, and whether zoom 0–5 fits the size goal.

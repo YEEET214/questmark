@@ -515,8 +515,11 @@ rejected: the task would still jump away.)
 * A small **toggle button** on the map (next to the zoom buttons) shows or
   hides completed quests. Its icon and tooltip say which state it's in
   ("Show completed" / "Hide completed").
-* The choice lasts while the app is open. Whether it should be remembered
-  across restarts can be decided when it's built.
+* **Built in Phase 4:** the choice lasts while the app is open and resets
+  to "hidden" on restart. This matches the "hidden by default" decision;
+  remembering it is easy to add later if wanted.
+* "Show on map" on a completed quest still works while completed quests
+  are hidden: the focused quest is always drawn.
 * Completed quests, when shown, keep the grey check marker (D9).
 * The "tasks without locations" badge is unaffected: it still counts all
   tasks without a location.
@@ -578,6 +581,36 @@ chosen in this order:
 * Fits with Phase 4: "show on map" requests still take priority over the
   start-up view.
 
+### D20. Show on map, zoom buttons, completed toggle (Phase 4)
+* **`MapFocusController`** (shared app state, `provider`) carries "Show on
+  map" requests from the list to the map. A request holds the task id and
+  its point.
+  * The map consumes each request exactly once (`takeRequest`).
+  * A request made before the map exists (first visit to the Map tab)
+    becomes the map's starting view, so it's never lost.
+  * The highlight is separate from the request. It stays until the user
+    taps empty map or focuses another quest.
+* **Camera moves** glide over 600 ms (ease in/out), using our own small
+  tween over `MapController.move`, because `flutter_map` 8 has no built-in
+  animated move. With the OS "remove animations" setting, moves are
+  instant. A request is acted on after the current frame, when the Map tab
+  is visible and laid out.
+* **Highlighted marker:** drawn 1.4x larger with a white halo, above all
+  other markers. Its screen-reader label ends in ", selected".
+* **List button:** a trailing "Show on map" icon (`travel_explore`) on
+  tiles with a location only. It appears as soon as a task gets a location.
+* **Map controls** (`MapControls`, bottom-right above the attribution
+  button), in Google Maps style: a 40 x 40 completed-quests toggle, and a
+  "+ / −" pair of 40 x 40 buttons in one rounded panel. Each zoom step is
+  one level, animated. "+" is disabled at zoom 19 and "−" at zoom 1. The
+  current zoom is tracked through `onPositionChanged`; updates that arrive
+  during layout are deferred to after the frame.
+* **The starting view** is computed from the *visible* quests, so hidden
+  completed quests don't pull the camera away.
+* **Test note:** `flutter_map` doesn't build markers that are off screen,
+  so map tests place quests close together. Its single-tap callback fires
+  only after the double-tap window, so tests advance time after a tap.
+
 ---
 
 ## 4. Phases
@@ -592,7 +625,7 @@ push branch → open PR → progress report → you review → merge PR into
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | ✅ Done (PR #4) | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | ⬜ Planned | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
+| **4. Show on map** | 🚧 In progress | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
 | **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |

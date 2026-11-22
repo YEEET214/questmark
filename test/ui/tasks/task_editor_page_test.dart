@@ -258,6 +258,34 @@ void main() {
         expect((await save(tester, result)).address, 'Oodi, Helsinki');
       });
 
+      testWidgets('after removing it, the picker reopens at the removed '
+          'location, not at the user (PR #10 review)', (tester) async {
+        final fake = fakePicker(tampere);
+        final result =
+            await openEditor(tester, initial: task, pickLocation: fake.picker);
+        await tester.tap(find.byKey(const Key('clearLocationButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('pickLocationButton')));
+        await tester.pumpAndSettle();
+        expect(fake.openedWith, [helsinki]);
+
+        final saved = await save(tester, result);
+        expect(saved.location, tampere);
+        expect(saved.address, isNull, reason: 'a new point, no address yet');
+      });
+
+      testWidgets('removing, then picking the same point again brings its '
+          'address back', (tester) async {
+        final result = await openEditor(tester,
+            initial: task, pickLocation: fakePicker(helsinki).picker);
+        await tester.tap(find.byKey(const Key('clearLocationButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('pickLocationButton')));
+        await tester.pumpAndSettle();
+        expect(find.text('Oodi, Helsinki'), findsOneWidget);
+        expect((await save(tester, result)).address, 'Oodi, Helsinki');
+      });
+
       testWidgets('the location can be removed (address too)',
           (tester) async {
         final result = await openEditor(tester, initial: task);

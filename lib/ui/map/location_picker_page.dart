@@ -13,6 +13,7 @@ import 'camera_animator.dart';
 import 'geo_point_latlng.dart';
 import 'initial_map_view.dart';
 import 'location_access.dart';
+import 'map_attribution.dart';
 import 'map_config.dart';
 import 'map_controls.dart';
 import 'player_marker.dart';
@@ -189,6 +190,9 @@ class _LocationPickerPageState extends State<LocationPickerPage>
     return Scaffold(
       appBar: AppBar(title: const Text('Pick location')),
       body: Stack(
+        // The map must fill the page even while the base map is still
+        // loading (an empty layer), or it would shrink to nothing.
+        fit: StackFit.expand,
         children: [
           FlutterMap(
             mapController: _map,
@@ -197,12 +201,6 @@ class _LocationPickerPageState extends State<LocationPickerPage>
               baseLayer,
               if (fix != null) PlayerMarker.accuracyLayer(fix),
               if (fix != null) PlayerMarker.dotLayer(fix),
-              RichAttributionWidget(
-                attributions: [
-                  for (final a in MapConfig.attributions)
-                    TextSourceAttribution(a),
-                ],
-              ),
             ],
           ),
           const IgnorePointer(child: Center(child: PickerPin())),
@@ -252,6 +250,8 @@ class _LocationPickerPageState extends State<LocationPickerPage>
                   : null,
             ),
           ),
+          // Last, so its open card is on top of the map buttons.
+          const Positioned(right: 12, bottom: 12, child: MapAttribution()),
         ],
       ),
       bottomNavigationBar: SafeArea(

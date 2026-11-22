@@ -93,6 +93,12 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       : widget.initialLocation;
   late String? _address = widget.initial?.address;
 
+  /// The location (and its address) from before the user removed it, so
+  /// the picker can reopen there: re-pinning is usually a small
+  /// adjustment, not a new place (user request, PR #10 review).
+  GeoPoint? _removedLocation;
+  String? _removedAddress;
+
   @override
   void dispose() {
     _title.dispose();
@@ -116,15 +122,21 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
   Future<void> _pickLocation() async {
     // Hide the keyboard first: the picker needs the whole screen.
     FocusScope.of(context).unfocus();
-    final picked = await widget.pickLocation(context, _location);
+    // After "remove", the picker still starts at the removed location.
+    final picked =
+        await widget.pickLocation(context, _location ?? _removedLocation);
     if (!mounted || picked == null || picked == _location) return;
     setState(() {
       _location = picked;
-      _address = null; // belonged to the old point
+      // An address belongs to its point: the old one is wrong for a new
+      // point, but comes back if the removed point is picked again.
+      _address = picked == _removedLocation ? _removedAddress : null;
     });
   }
 
   void _clearLocation() => setState(() {
+        _removedLocation = _location;
+        _removedAddress = _address;
         _location = null;
         _address = null;
       });

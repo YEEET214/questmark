@@ -8,6 +8,7 @@ import 'package:questmark/services/location_service.dart';
 import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/state/map_focus_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
+import 'package:questmark/ui/map/map_attribution.dart';
 import 'package:questmark/ui/map/map_config.dart';
 import 'package:questmark/ui/map/map_controls.dart';
 import 'package:questmark/ui/map/map_page.dart';
@@ -102,7 +103,25 @@ void main() {
     await pumpMap(tester, []);
     expect(find.byType(FlutterMap), findsOneWidget);
     expect(find.byType(QuestMarker), findsNothing);
-    expect(find.byType(RichAttributionWidget), findsOneWidget);
+    expect(find.byType(MapAttribution), findsOneWidget);
+  });
+
+  testWidgets('the open attribution card is on top of the map buttons '
+      '(PR #10 review)', (tester) async {
+    await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+    final zoomBefore = mapController.camera.zoom;
+    await tapByKey(tester, 'attributionButton');
+
+    final card = tester.getRect(find.byKey(const Key('attributionCard')));
+    final zoomOut = find.byKey(const Key('zoomOutButton'));
+    // The test only means something if they really overlap.
+    expect(card.overlaps(tester.getRect(zoomOut)), isTrue);
+
+    // A tap there lands on the card, not on the button underneath.
+    await tester.tap(zoomOut, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(mapController.camera.zoom, zoomBefore);
+    expect(find.byKey(const Key('attributionCard')), findsOneWidget);
   });
 
   testWidgets('one marker per located quest; list-only quests are skipped',

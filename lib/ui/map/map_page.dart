@@ -16,6 +16,7 @@ import 'camera_animator.dart';
 import 'geo_point_latlng.dart';
 import 'initial_map_view.dart';
 import 'location_access.dart';
+import 'map_attribution.dart';
 import 'map_config.dart';
 import 'map_controls.dart';
 import 'location_prompt.dart';
@@ -87,6 +88,13 @@ class MapPage extends StatelessWidget {
                   child: MissingLocationBadge(
                     count: controller.unlocatedTasks.length,
                   ),
+                ),
+                // Last, so its open card is on top of the map buttons and
+                // the badge.
+                const Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: MapAttribution(),
                 ),
               ],
             )
@@ -331,6 +339,9 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     final showPrompt = status == LocationStatus.denied && !_promptDismissed;
 
     return Stack(
+      // The map must fill the page even while the base map is still
+      // loading (an empty layer), or it would shrink to nothing.
+      fit: StackFit.expand,
       children: [
         FlutterMap(
           mapController: _map,
@@ -342,17 +353,12 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
             if (fix != null) PlayerMarker.accuracyLayer(fix),
             if (fix != null) PlayerMarker.dotLayer(fix),
             MarkerLayer(markers: _markers()),
-            RichAttributionWidget(
-              // Attributions are required by the data licence (ODbL) and by
-              // OpenFreeMap / OpenMapTiles.
-              attributions: [
-                for (final a in MapConfig.attributions)
-                  TextSourceAttribution(a),
-              ],
-            ),
+            // The attribution is drawn by MapPage, above everything else
+            // (MapAttribution).
           ],
         ),
-        // Above the attribution button in the bottom-right corner.
+        // Above the attribution button in the bottom-right corner (drawn by
+        // MapPage).
         Positioned(
           right: 12,
           bottom: 72,

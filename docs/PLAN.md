@@ -810,6 +810,22 @@ Two ways, both ending in the normal task editor:
 * The camera glide moved into a shared `CameraAnimator`, so the world
   map and the picker move the camera the same way.
 
+**Changed during the PR #10 review (user requests):**
+* **After removing a location, "Pick on map" reopens at the removed
+  location**, not at the user's position. Re-pinning is usually a small
+  adjustment, so panning back from wherever the user is would be
+  annoying. If the same point is picked again, its address comes back
+  too. Saving without picking still saves "no location".
+* **The map credits are always on top.** flutter_map's attribution
+  widget must be drawn inside the map, so the map buttons covered its
+  open popup. It's replaced by our own `MapAttribution` (an "i" button
+  that opens a "Map credits" card with the same three lines), placed last
+  on both map pages so nothing covers it.
+* Found while doing that: flutter_map's attribution widget had been the
+  thing stretching the map to fill the page. Without it, the map shrank
+  to nothing while the base map was still loading. Both map pages now
+  use `StackFit.expand`, so the map always fills the page.
+
 ---
 
 ## 4. Phases

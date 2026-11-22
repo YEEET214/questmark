@@ -155,6 +155,7 @@ void main() {
     expect(find.byKey(const Key('myLocationButton')), findsOneWidget);
     expect(find.byKey(const Key('zoomInButton')), findsOneWidget);
     expect(find.byKey(const Key('toggleCompletedButton')), findsNothing);
+    expect(find.byKey(const Key('attributionButton')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('zoomInButton')));
     await tester.pumpAndSettle();

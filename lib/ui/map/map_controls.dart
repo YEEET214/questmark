@@ -1,8 +1,22 @@
 import 'package:flutter/material.dart';
 
+/// What the my-location button shows (PLAN.md D8).
+enum MyLocationButtonState {
+  /// The camera follows the user: filled crosshair, highlighted.
+  following,
+
+  /// Location is available but not followed: empty crosshair.
+  available,
+
+  /// Location is off, not allowed, or not checked yet: crossed out.
+  /// Tapping it still works (it explains, asks, or opens the settings).
+  unavailable,
+}
+
 /// The small button stack on the right of the map, in the style of
 /// Google Maps:
 ///
+/// * a my-location button: centre on the user and follow them (D8);
 /// * a toggle that shows or hides completed quests (PLAN.md D17);
 /// * a "+ / −" zoom pair.
 ///
@@ -16,8 +30,12 @@ class MapControls extends StatelessWidget {
     required this.onToggleCompleted,
     required this.onZoomIn,
     required this.onZoomOut,
+    required this.myLocation,
+    required this.onMyLocation,
   });
 
+  final MyLocationButtonState myLocation;
+  final VoidCallback onMyLocation;
   final bool showCompleted;
   final VoidCallback onToggleCompleted;
   final VoidCallback? onZoomIn;
@@ -31,6 +49,24 @@ class MapControls extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _Panel(
+          child: _ControlButton(
+            key: const Key('myLocationButton'),
+            tooltip: switch (myLocation) {
+              MyLocationButtonState.following => 'Following your location',
+              MyLocationButtonState.available => 'Show my location',
+              MyLocationButtonState.unavailable => 'Location unavailable',
+            },
+            icon: switch (myLocation) {
+              MyLocationButtonState.following => Icons.my_location,
+              MyLocationButtonState.available => Icons.location_searching,
+              MyLocationButtonState.unavailable => Icons.location_disabled,
+            },
+            selected: myLocation == MyLocationButtonState.following,
+            onPressed: onMyLocation,
+          ),
+        ),
+        const SizedBox(height: 8),
         _Panel(
           child: _ControlButton(
             key: const Key('toggleCompletedButton'),

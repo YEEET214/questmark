@@ -8,6 +8,9 @@ import 'map_config.dart';
 typedef MapTapCallback = void Function(TapPosition, LatLng);
 typedef MapPositionCallback = void Function(MapCamera, bool hasGesture);
 
+/// What [InitialMapView.choose] based the starting view on.
+enum StartViewSource { focusRequest, gps, lastKnown, quests }
+
 /// Where the camera starts when the map first opens.
 ///
 /// * No quests: the whole world.
@@ -16,8 +19,13 @@ typedef MapPositionCallback = void Function(MapCamera, bool hasGesture);
 /// * A pending "Show on map" request (made before the map existed) wins
 ///   over all of these: the map then simply starts centred on that quest.
 ///
+/// [choose] puts the user's position (live or last known) ahead of the
+/// quests (PLAN.md D19).
+///
 /// After that, the camera only moves when the user moves it, or when a
-/// "Show on map" request or a zoom button moves it on their behalf.
+/// "Show on map" request, a map button or follow mode moves it on their
+/// behalf. The one exception: the first GPS fix glides the camera to the
+/// user if they haven't touched the map yet (D19).
 sealed class InitialMapView {
   const InitialMapView();
 
@@ -29,6 +37,44 @@ sealed class InitialMapView {
       return CenterView(first, MapConfig.questZoom);
     }
     return FitView(points);
+  }
+
+  /// Picks the map's starting view, in this order (PLAN.md D19):
+  /// 1. a pending "Show on map" request ([focus]);
+  /// 2. the current GPS position ([gps]);
+  /// 3. the last known position ([lastKnown]);
+  /// 4. otherwise [InitialMapView.forPoints] on the [quests].
+  ///
+  /// The returned source tells the map whether a GPS fix arriving later
+  /// should still glide the camera to the user.
+  static ({InitialMapView view, StartViewSource source}) choose({
+    LatLng? focus,
+    LatLng? gps,
+    LatLng? lastKnown,
+    required List<LatLng> quests,
+  }) {
+    if (focus != null) {
+      return (
+        view: CenterView(focus, MapConfig.questZoom),
+        source: StartViewSource.focusRequest,
+      );
+    }
+    if (gps != null) {
+      return (
+        view: CenterView(gps, MapConfig.playerZoom),
+        source: StartViewSource.gps,
+      );
+    }
+    if (lastKnown != null) {
+      return (
+        view: CenterView(lastKnown, MapConfig.playerZoom),
+        source: StartViewSource.lastKnown,
+      );
+    }
+    return (
+      view: InitialMapView.forPoints(quests),
+      source: StartViewSource.quests,
+    );
   }
 
   /// Converts to flutter_map options.

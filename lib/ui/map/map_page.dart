@@ -4,16 +4,21 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/location_fix.dart';
 import '../../models/task.dart';
+import '../../state/location_controller.dart';
 import '../../state/map_focus_controller.dart';
 import '../../state/task_list_controller.dart';
+import '../common/confirm_dialog.dart';
 import '../tasks/task_actions.dart';
 import 'base_map_layer.dart';
 import 'geo_point_latlng.dart';
 import 'initial_map_view.dart';
 import 'map_config.dart';
 import 'map_controls.dart';
+import 'location_prompt.dart';
 import 'missing_location_badge.dart';
+import 'player_marker.dart';
 import 'quest_details_sheet.dart';
 import 'quest_marker.dart';
 
@@ -27,6 +32,11 @@ import 'quest_marker.dart';
 /// "Show on map" requests arrive through [MapFocusController]. The camera
 /// glides to the quest and its marker is highlighted until the user taps
 /// empty map.
+///
+/// The player's position comes from [LocationController] (PLAN.md D8,
+/// D19): a blue dot with an accuracy circle, a my-location button that
+/// centres on the user and then follows them until they drag the map, and
+/// a [LocationPrompt] that explains before the OS permission dialog.
 class MapPage extends StatelessWidget {
   const MapPage({
     super.key,
@@ -48,11 +58,17 @@ class MapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<TaskListController>();
+    // Only whether the location check has finished matters here; the map
+    // itself listens for position updates.
+    final locationReady = context.select<LocationController, bool>(
+      (l) => l.hasStarted,
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('World Map')),
-      // Wait for the first task load, so the initial camera can frame the
-      // quests instead of jumping once they arrive.
-      body: controller.hasLoaded
+      // Wait for the first task load and the location check (both quick),
+      // so the starting camera can use them instead of jumping once they
+      // arrive (PLAN.md D19).
+      body: controller.hasLoaded && locationReady
           ? Stack(
               children: [
                 _QuestMap(
@@ -97,7 +113,30 @@ class _QuestMap extends StatefulWidget {
 class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   late final MapController _map = widget.mapController ?? MapController();
   late final MapFocusController _focus;
+  late final LocationController _location;
   late final MapOptions _options;
+
+  /// What the starting view was based on (PLAN.md D19).
+  late final StartViewSource _startSource;
+
+  /// Whether the camera has been moved by the user, or on their behalf
+  /// (a button, "Show on map"). Once true, the first GPS fix no longer
+  /// moves the camera by itself.
+  bool _touched = false;
+
+  /// Whether this map has seen a GPS fix yet.
+  bool _hadFix = false;
+
+  /// The last fix the map reacted to, to tell new fixes from other
+  /// location changes.
+  LocationFix? _seenFix;
+
+  /// Follow mode: the camera stays on the user as they move. Turned on by
+  /// the my-location button, off by dragging the map.
+  bool _following = false;
+
+  /// "Not now" on the [LocationPrompt]. Lasts for this app session.
+  bool _promptDismissed = false;
 
   /// Completed quests are hidden by default (PLAN.md D17). This lasts for
   /// the app session and resets to hidden on restart.
@@ -113,15 +152,25 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _focus = context.read<MapFocusController>()..addListener(_onFocusChanged);
+    _location = context.read<LocationController>()
+      ..addListener(_onLocationChanged);
 
-    // A "Show on map" request made before the map existed (e.g. the very
-    // first visit to the Map tab) decides the starting view.
+    // Starting view (PLAN.md D19): a "Show on map" request made before the
+    // map existed, else the user's live position, else their last known
+    // position, else the quests.
     final pending = _focus.takeRequest();
-    final view = pending != null
-        ? CenterView(pending.point.toLatLng(), MapConfig.questZoom)
-        : InitialMapView.forPoints(
-            [for (final t in _visibleTasks()) t.location!.toLatLng()]);
-    _options = view.toMapOptions(
+    final current = _location.current;
+    final start = InitialMapView.choose(
+      focus: pending?.point.toLatLng(),
+      gps: current?.point.toLatLng(),
+      lastKnown: _location.lastKnown?.point.toLatLng(),
+      quests: [for (final t in _visibleTasks()) t.location!.toLatLng()],
+    );
+    _startSource = start.source;
+    _touched = pending != null;
+    _seenFix = current;
+    _hadFix = current != null;
+    _options = start.view.toMapOptions(
       onTap: (_, _) => _focus.clearHighlight(),
       onPositionChanged: _onCameraMoved,
     );
@@ -130,6 +179,7 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   @override
   void dispose() {
     _focus.removeListener(_onFocusChanged);
+    _location.removeListener(_onLocationChanged);
     _cameraAnimation?.dispose();
     if (widget.mapController == null) _map.dispose();
     super.dispose();
@@ -155,19 +205,117 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
       if (!mounted) return;
       final request = _focus.takeRequest();
       if (request != null) {
+        _touched = true;
+        if (_following) setState(() => _following = false);
         _animateTo(request.point.toLatLng(), MapConfig.questZoom);
       }
     });
   }
 
+  void _onLocationChanged() {
+    if (!mounted) return;
+    setState(() {
+      // Following needs a position. If location became unavailable, stop.
+      if (_location.status != LocationStatus.on) _following = false;
+    });
+
+    final fix = _location.current;
+    if (fix == null || fix == _seenFix) return;
+    _seenFix = fix;
+    final first = !_hadFix;
+    _hadFix = true;
+
+    if (_following) {
+      _animateTo(fix.point.toLatLng(), _map.camera.zoom);
+    } else if (first && !_touched && _startSource != StartViewSource.gps) {
+      // D19: the map opened before the first fix. Glide to the user,
+      // unless they've already moved the map themselves.
+      _animateTo(fix.point.toLatLng(), MapConfig.playerZoom);
+    }
+  }
+
+  /// The my-location button (and the prompt's "Allow").
+  Future<void> _onMyLocationPressed() async {
+    _touched = true;
+    switch (_location.status) {
+      case LocationStatus.on:
+        _startFollowing();
+      case LocationStatus.unknown:
+      case LocationStatus.denied:
+        final status = await _location.requestAccess();
+        if (!mounted) return;
+        setState(() => _promptDismissed = true);
+        if (status == LocationStatus.on) _startFollowing();
+      case LocationStatus.deniedForever:
+        await _offerSettings(
+          title: 'Location access is blocked',
+          message:
+              'To see where you are on the map, allow location access '
+              'for QuestMark in your phone\'s settings.',
+        );
+      case LocationStatus.serviceOff:
+        await _offerSettings(
+          title: 'Location is turned off',
+          message:
+              'Turn on your phone\'s location to see where you are on '
+              'the map.',
+        );
+    }
+  }
+
+  /// Centres on the user (at street level, or closer if already closer)
+  /// and keeps following them. With no fix yet, the first fix does it.
+  void _startFollowing() {
+    setState(() => _following = true);
+    final fix = _location.current;
+    if (fix == null) {
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Finding your location…'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+    final zoom = _map.camera.zoom < MapConfig.playerZoom
+        ? MapConfig.playerZoom
+        : _map.camera.zoom;
+    _animateTo(fix.point.toLatLng(), zoom);
+  }
+
+  Future<void> _offerSettings({
+    required String title,
+    required String message,
+  }) async {
+    final open = await confirmDialog(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: 'Open settings',
+      cancelLabel: 'Cancel',
+    );
+    if (open) await _location.openSettings();
+  }
+
   void _onCameraMoved(MapCamera camera, bool hasGesture) {
+    if (hasGesture) {
+      _touched = true;
+      // Dragging the map ends follow mode, like in other map apps.
+      if (_following) _setStateSafely(() => _following = false);
+    }
     if (camera.zoom == _zoom) return;
+    _setStateSafely(() => _zoom = camera.zoom);
+  }
+
+  /// The map can report positions during layout, when setState isn't
+  /// allowed. In that case, update right after the frame.
+  void _setStateSafely(VoidCallback change) {
     void update() {
-      if (mounted) setState(() => _zoom = camera.zoom);
+      if (mounted) setState(change);
     }
 
-    // The map can report positions during layout, when setState isn't
-    // allowed. In that case, update right after the frame.
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
       WidgetsBinding.instance.addPostFrameCallback((_) => update());
@@ -209,6 +357,9 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   }
 
   void _zoomBy(double delta) {
+    // Zooming keeps follow mode: the camera zooms around its centre, which
+    // is the user while following.
+    _touched = true;
     final camera = _map.camera;
     _animateTo(camera.center, camera.zoom + delta);
   }
@@ -218,6 +369,9 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     final zoom = _zoom;
     final canZoomIn = zoom == null || zoom < MapConfig.maxZoom - 0.01;
     final canZoomOut = zoom == null || zoom > MapConfig.minZoom + 0.01;
+    final fix = _location.current;
+    final status = _location.status;
+    final showPrompt = status == LocationStatus.denied && !_promptDismissed;
 
     return Stack(
       children: [
@@ -226,6 +380,10 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
           options: _options,
           children: [
             widget.baseLayer,
+            // The player is drawn below the quests, so a quest at the
+            // user's position can still be tapped.
+            if (fix != null) PlayerMarker.accuracyLayer(fix),
+            if (fix != null) PlayerMarker.dotLayer(fix),
             MarkerLayer(markers: _markers()),
             RichAttributionWidget(
               // Attributions are required by the data licence (ODbL) and by
@@ -242,6 +400,12 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
           right: 12,
           bottom: 72,
           child: MapControls(
+            myLocation: status != LocationStatus.on
+                ? MyLocationButtonState.unavailable
+                : _following
+                ? MyLocationButtonState.following
+                : MyLocationButtonState.available,
+            onMyLocation: _onMyLocationPressed,
             showCompleted: _showCompleted,
             onToggleCompleted: () =>
                 setState(() => _showCompleted = !_showCompleted),
@@ -249,6 +413,16 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
             onZoomOut: canZoomOut ? () => _zoomBy(-1) : null,
           ),
         ),
+        if (showPrompt)
+          Positioned(
+            left: 8,
+            right: 8,
+            top: 8,
+            child: LocationPrompt(
+              onAllow: _onMyLocationPressed,
+              onDismiss: () => setState(() => _promptDismissed = true),
+            ),
+          ),
       ],
     );
   }

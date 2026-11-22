@@ -152,6 +152,24 @@ void main() {
       expect(names, contains('idx_tasks_deleted'));
     });
 
+    test('the real v3 -> v4 upgrade adds an empty last_location table',
+        () async {
+      final v3 = await AppDatabase.open(
+          factory: databaseFactoryFfi,
+          path: path,
+          schema: AppDatabase.migrations.sublist(0, 3));
+      await v3.insert('tasks', {...validRow(), 'title': 'kept'});
+      await v3.close();
+
+      final current =
+          await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+      addTearDown(current.close);
+
+      expect(await current.getVersion(), greaterThanOrEqualTo(4));
+      expect((await current.query('tasks')).single['title'], 'kept');
+      expect(await current.query('last_location'), isEmpty);
+    });
+
     test('a failing migration rolls back and leaves the old data intact',
         () async {
       await createV1WithOneTask();

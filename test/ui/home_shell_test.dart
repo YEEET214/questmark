@@ -4,6 +4,7 @@ import 'package:questmark/app.dart';
 import 'package:questmark/models/task.dart';
 import 'package:questmark/state/navigation_controller.dart';
 
+import '../helpers/fake_location_service.dart';
 import '../helpers/fake_task_repository.dart';
 
 void main() {
@@ -12,6 +13,8 @@ void main() {
         [NavigationController? nav]) async {
       await tester.pumpWidget(QuestMarkApp(
         taskRepository: FakeTaskRepository(),
+        locationService: FakeLocationService(),
+        lastLocationRepository: FakeLastLocationRepository(),
         navigationController: nav,
         // No real map tiles in tests.
         mapBaseLayer: const SizedBox.shrink(),
@@ -101,6 +104,8 @@ void main() {
           Task(id: 1, title: 'swipe me', createdAt: DateTime.utc(2026, 1, 2)),
           Task(id: 2, title: 'other', createdAt: DateTime.utc(2026, 1, 1)),
         ]),
+        locationService: FakeLocationService(),
+        lastLocationRepository: FakeLastLocationRepository(),
         mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle();
@@ -144,6 +149,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(SnackBar), findsNothing);
       expect(fabBottom(tester), closeTo(resting, 0.5));
+    });
+  });
+  group('GPS only while the app is in the foreground (D8)', () {
+    testWidgets('going to the background stops the GPS; coming back '
+        'restarts it', (tester) async {
+      final gps = FakeLocationService();
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: FakeTaskRepository(),
+        locationService: gps,
+        lastLocationRepository: FakeLastLocationRepository(),
+        mapBaseLayer: const SizedBox.shrink(),
+      ));
+      await tester.pumpAndSettle();
+      expect(gps.isListening, isTrue);
+
+      for (final s in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+      await tester.pumpAndSettle();
+      expect(gps.isListening, isFalse);
+
+      for (final s in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+      await tester.pumpAndSettle();
+      expect(gps.isListening, isTrue);
     });
   });
 }

@@ -34,6 +34,9 @@ abstract final class MapConfig {
   /// Zoom used when focusing on a single quest.
   static const double questZoom = 15;
 
+  /// Zoom used when centring on the user (street level, PLAN.md D19).
+  static const double playerZoom = 15;
+
   /// Starting view when there are no quests to show: the whole world.
   static const worldCenter = LatLng(20, 0);
   static const double worldZoom = 1.5;

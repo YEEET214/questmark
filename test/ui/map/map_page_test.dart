@@ -620,4 +620,38 @@ void main() {
       });
     });
   });
+  group('long-press: new quest at that spot (Phase 6, D23)', () {
+    testWidgets('opens the new-quest editor with that point; saving puts a '
+        'marker there', (tester) async {
+      final repo = await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      final mapRect = tester.getRect(find.byType(FlutterMap));
+      final spot = mapRect.center + const Offset(-60, 90);
+      final expected =
+          mapController.camera.screenOffsetToLatLng(spot - mapRect.topLeft);
+
+      await tester.longPressAt(spot);
+      await tester.pumpAndSettle();
+      expect(find.text('New quest'), findsOneWidget);
+      expect(find.text('Pinned on the map'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('titleField')), 'Here!');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final created =
+          (await repo.getAll()).singleWhere((t) => t.title == 'Here!');
+      expect(created.location!.latitude, closeTo(expected.latitude, 1e-6));
+      expect(created.location!.longitude, closeTo(expected.longitude, 1e-6));
+      expect(markerFor(created.id!), findsOneWidget);
+    });
+
+    testWidgets('backing out of the editor creates nothing', (tester) async {
+      final repo = await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      await tester.longPressAt(tester.getCenter(find.byType(FlutterMap)));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(await repo.getAll(), hasLength(1));
+    });
+  });
 }

@@ -37,6 +37,25 @@ void main() {
     expect(calls, ['in', 'out', 'toggle', 'me']);
   });
 
+  testWidgets('without onToggleCompleted the toggle is left out (picker)',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: MapControls(
+            myLocation: MyLocationButtonState.available,
+            onMyLocation: () {},
+            onZoomIn: () {},
+            onZoomOut: () {},
+          ),
+        ),
+      ),
+    ));
+    expect(find.byKey(const Key('toggleCompletedButton')), findsNothing);
+    expect(find.byKey(const Key('myLocationButton')), findsOneWidget);
+    expect(find.byKey(const Key('zoomInButton')), findsOneWidget);
+  });
+
   testWidgets('a null callback disables that button', (tester) async {
     final calls = await pumpControls(tester, zoomInEnabled: false);
     await tester.tap(find.byKey(const Key('zoomInButton')));

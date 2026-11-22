@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/ui/formatting.dart';
 
 void main() {
@@ -17,6 +18,17 @@ void main() {
 
     test('pads years to four digits', () {
       expect(formatDate(DateTime(999, 3, 4)), '04-03-0999');
+    });
+  });
+
+  group('formatCoordinates', () {
+    test('latitude, longitude with five decimals', () {
+      expect(formatCoordinates(GeoPoint(60.1699, 24.938456)),
+          '60.16990, 24.93846');
+    });
+
+    test('keeps the minus sign for south and west', () {
+      expect(formatCoordinates(GeoPoint(-33.86, -70.5)), '-33.86000, -70.50000');
     });
   });
 }

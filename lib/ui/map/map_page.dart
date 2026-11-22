@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -9,11 +10,12 @@ import '../../models/task.dart';
 import '../../state/location_controller.dart';
 import '../../state/map_focus_controller.dart';
 import '../../state/task_list_controller.dart';
-import '../common/confirm_dialog.dart';
 import '../tasks/task_actions.dart';
 import 'base_map_layer.dart';
+import 'camera_animator.dart';
 import 'geo_point_latlng.dart';
 import 'initial_map_view.dart';
+import 'location_access.dart';
 import 'map_config.dart';
 import 'map_controls.dart';
 import 'location_prompt.dart';
@@ -146,7 +148,7 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   /// the map reports its first position.
   double? _zoom;
 
-  AnimationController? _cameraAnimation;
+  late final CameraAnimator _camera = CameraAnimator(this, _map);
 
   @override
   void initState() {
@@ -172,6 +174,8 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     _hadFix = current != null;
     _options = start.view.toMapOptions(
       onTap: (_, _) => _focus.clearHighlight(),
+      // Long-press: a new quest at that spot (R7, PLAN.md D23).
+      onLongPress: (_, point) => _newQuestAt(point),
       onPositionChanged: _onCameraMoved,
     );
   }
@@ -180,7 +184,7 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   void dispose() {
     _focus.removeListener(_onFocusChanged);
     _location.removeListener(_onLocationChanged);
-    _cameraAnimation?.dispose();
+    _camera.dispose();
     if (widget.mapController == null) _map.dispose();
     super.dispose();
   }
@@ -234,33 +238,17 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     }
   }
 
-  /// The my-location button (and the prompt's "Allow").
+  /// The my-location button (and the prompt's "Allow"): asks, explains or
+  /// offers the settings as needed (D22), then centres and follows.
   Future<void> _onMyLocationPressed() async {
     _touched = true;
-    switch (_location.status) {
-      case LocationStatus.on:
-        _startFollowing();
-      case LocationStatus.unknown:
-      case LocationStatus.denied:
-        final status = await _location.requestAccess();
-        if (!mounted) return;
-        setState(() => _promptDismissed = true);
-        if (status == LocationStatus.on) _startFollowing();
-      case LocationStatus.deniedForever:
-        await _offerSettings(
-          title: 'Location access is blocked',
-          message:
-              'To see where you are on the map, allow location access '
-              'for QuestMark in your phone\'s settings.',
-        );
-      case LocationStatus.serviceOff:
-        await _offerSettings(
-          title: 'Location is turned off',
-          message:
-              'Turn on your phone\'s location to see where you are on '
-              'the map.',
-        );
-    }
+    final couldAsk = _location.status == LocationStatus.denied ||
+        _location.status == LocationStatus.unknown;
+    final status = await ensureLocationAccess(context, _location);
+    if (!mounted) return;
+    // Asked once from here: the prompt card has done its job.
+    if (couldAsk) setState(() => _promptDismissed = true);
+    if (status == LocationStatus.on) _startFollowing();
   }
 
   /// Centres on the user (at street level, or closer if already closer)
@@ -285,18 +273,11 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     _animateTo(fix.point.toLatLng(), zoom);
   }
 
-  Future<void> _offerSettings({
-    required String title,
-    required String message,
-  }) async {
-    final open = await confirmDialog(
-      context,
-      title: title,
-      message: message,
-      confirmLabel: 'Open settings',
-      cancelLabel: 'Cancel',
-    );
-    if (open) await _location.openSettings();
+  /// Opens the new-quest editor with [point] already filled in. The
+  /// vibration confirms the long-press was recognised.
+  void _newQuestAt(LatLng point) {
+    HapticFeedback.mediumImpact();
+    openTaskEditor(context, null, location: point.toPickedGeoPoint());
   }
 
   void _onCameraMoved(MapCamera camera, bool hasGesture) {
@@ -326,35 +307,11 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
 
   /// Moves the camera smoothly, or instantly if the OS "remove animations"
   /// setting is on.
-  void _animateTo(LatLng center, double zoom) {
-    _cameraAnimation?.dispose();
-    _cameraAnimation = null;
-    final zoomTarget = zoom.clamp(MapConfig.minZoom, MapConfig.maxZoom);
-
-    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
-      _map.move(center, zoomTarget);
-      return;
-    }
-
-    final camera = _map.camera;
-    final lat = Tween(begin: camera.center.latitude, end: center.latitude);
-    final lng = Tween(begin: camera.center.longitude, end: center.longitude);
-    final z = Tween(begin: camera.zoom, end: zoomTarget);
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    final curve =
-        CurvedAnimation(parent: controller, curve: Curves.easeInOutCubic);
-    controller.addListener(() {
-      _map.move(
-        LatLng(lat.evaluate(curve), lng.evaluate(curve)),
-        z.evaluate(curve),
+  void _animateTo(LatLng center, double zoom) => _camera.animateTo(
+        center,
+        zoom,
+        instant: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
       );
-    });
-    _cameraAnimation = controller;
-    controller.forward();
-  }
 
   void _zoomBy(double delta) {
     // Zooming keeps follow mode: the camera zooms around its centre, which

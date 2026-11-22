@@ -7,6 +7,14 @@ import 'map_config.dart';
 /// references).
 typedef StyleLoader = Future<vt.Style> Function();
 
+/// The base map widget, provided app-wide (`Provider<MapBaseLayer>`), so a
+/// page pushed on top of the shell, like the location picker, draws the
+/// same map. Tests provide an empty one, so no tiles are loaded.
+class MapBaseLayer {
+  const MapBaseLayer(this.layer);
+  final Widget layer;
+}
+
 /// Loads the OpenFreeMap style with our User-Agent.
 ///
 /// The User-Agent header is sent with the style request and passed on by

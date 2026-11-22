@@ -47,6 +47,9 @@ class QuestMarkApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // The base map for pages pushed on top of the shell (the location
+        // picker), so they draw the same map and tests can replace it.
+        Provider<MapBaseLayer>.value(value: MapBaseLayer(mapBaseLayer)),
         ChangeNotifierProvider<NavigationController>(
           create: (_) => navigationController ?? NavigationController(),
         ),

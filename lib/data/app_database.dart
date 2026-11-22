@@ -2,6 +2,9 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/task.dart';
+import 'last_location_repository.dart';
+
+typedef _Loc = SqfliteLastLocationRepository;
 
 /// One schema migration: a list of SQL statements that moves the database
 /// from version N to N + 1.
@@ -63,6 +66,20 @@ class AppDatabase {
     [
       'ALTER TABLE tasks ADD COLUMN ${Task.colDeletedAt} INTEGER',
       'CREATE INDEX idx_tasks_deleted ON tasks (${Task.colDeletedAt})',
+    ],
+    // v4 (Phase 5): the last GPS fix, so the map can start there when
+    // there's no current fix (PLAN.md D19). At most one row (id = 1):
+    // only the latest position is kept, never a history.
+    [
+      '''
+      CREATE TABLE ${_Loc.table} (
+        ${_Loc.colId}         INTEGER PRIMARY KEY CHECK (${_Loc.colId} = 1),
+        ${_Loc.colLatitude}   REAL    NOT NULL CHECK (${_Loc.colLatitude} BETWEEN -90 AND 90),
+        ${_Loc.colLongitude}  REAL    NOT NULL CHECK (${_Loc.colLongitude} BETWEEN -180 AND 180),
+        ${_Loc.colAccuracy}   REAL    NOT NULL CHECK (${_Loc.colAccuracy} >= 0),
+        ${_Loc.colRecordedAt} INTEGER NOT NULL
+      )
+      ''',
     ],
   ];
 

@@ -64,4 +64,40 @@ void main() {
       }
     });
   });
+  group('InitialMapView.choose (start-up order, PLAN.md D19)', () {
+    const london = LatLng(51.5, -0.12);
+    const paris = LatLng(48.86, 2.35);
+    const quests = [helsinki, tampere];
+
+    test('1. a pending "Show on map" request wins over everything', () {
+      final r = InitialMapView.choose(
+          focus: tampere, gps: london, lastKnown: paris, quests: quests);
+      expect(r.source, StartViewSource.focusRequest);
+      final v = r.view as CenterView;
+      expect(v.center, tampere);
+      expect(v.zoom, MapConfig.questZoom);
+    });
+
+    test('2. then the live GPS position, at street level', () {
+      final r = InitialMapView.choose(
+          gps: london, lastKnown: paris, quests: quests);
+      expect(r.source, StartViewSource.gps);
+      final v = r.view as CenterView;
+      expect(v.center, london);
+      expect(v.zoom, MapConfig.playerZoom);
+    });
+
+    test('3. then the last known position', () {
+      final r = InitialMapView.choose(lastKnown: paris, quests: quests);
+      expect(r.source, StartViewSource.lastKnown);
+      expect((r.view as CenterView).center, paris);
+    });
+
+    test('4. otherwise the quests, as before (or the world without any)', () {
+      final r = InitialMapView.choose(quests: quests);
+      expect(r.source, StartViewSource.quests);
+      expect(r.view, isA<FitView>());
+      expect(InitialMapView.choose(quests: const []).view, isA<WorldView>());
+    });
+  });
 }

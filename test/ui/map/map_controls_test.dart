@@ -8,12 +8,15 @@ void main() {
     bool showCompleted = false,
     bool zoomInEnabled = true,
     bool zoomOutEnabled = true,
+    MyLocationButtonState myLocation = MyLocationButtonState.available,
   }) async {
     final calls = <String>[];
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: Center(
           child: MapControls(
+            myLocation: myLocation,
+            onMyLocation: () => calls.add('me'),
             showCompleted: showCompleted,
             onToggleCompleted: () => calls.add('toggle'),
             onZoomIn: zoomInEnabled ? () => calls.add('in') : null,
@@ -30,7 +33,8 @@ void main() {
     await tester.tap(find.byKey(const Key('zoomInButton')));
     await tester.tap(find.byKey(const Key('zoomOutButton')));
     await tester.tap(find.byKey(const Key('toggleCompletedButton')));
-    expect(calls, ['in', 'out', 'toggle']);
+    await tester.tap(find.byKey(const Key('myLocationButton')));
+    expect(calls, ['in', 'out', 'toggle', 'me']);
   });
 
   testWidgets('a null callback disables that button', (tester) async {

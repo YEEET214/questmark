@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'data/last_location_repository.dart';
 import 'data/task_repository.dart';
+import 'services/location_service.dart';
+import 'state/location_controller.dart';
 import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
 import 'state/task_list_controller.dart';
@@ -19,11 +22,19 @@ class QuestMarkApp extends StatelessWidget {
   const QuestMarkApp({
     super.key,
     required this.taskRepository,
+    required this.locationService,
+    required this.lastLocationRepository,
     this.navigationController,
     this.mapBaseLayer = const OpenFreeMapLayer(),
   });
 
   final TaskRepository taskRepository;
+
+  /// The phone's GPS. Tests pass a fake that emits made-up positions.
+  final LocationService locationService;
+
+  /// Where the last GPS fix is remembered between app starts (D19).
+  final LastLocationRepository lastLocationRepository;
 
   /// Optional pre-built controller, mainly for tests.
   final NavigationController? navigationController;
@@ -48,14 +59,55 @@ class QuestMarkApp extends StatelessWidget {
         ChangeNotifierProvider<TaskListController>(
           create: (_) => TaskListController(taskRepository)..load(),
         ),
+        ChangeNotifierProvider<LocationController>(
+          create: (_) =>
+              LocationController(locationService, lastLocationRepository)
+                ..start(),
+        ),
       ],
-      child: MaterialApp(
-        title: 'QuestMark',
-        debugShowCheckedModeBanner: false,
-        theme: buildQuestTheme(Brightness.light),
-        darkTheme: buildQuestTheme(Brightness.dark),
-        home: HomeShell(mapBaseLayer: mapBaseLayer),
+      child: _ForegroundLocation(
+        child: MaterialApp(
+          title: 'QuestMark',
+          debugShowCheckedModeBanner: false,
+          theme: buildQuestTheme(Brightness.light),
+          darkTheme: buildQuestTheme(Brightness.dark),
+          home: HomeShell(mapBaseLayer: mapBaseLayer),
+        ),
       ),
     );
   }
+}
+
+/// Foreground-only GPS (PLAN.md D8): stops the location updates when the
+/// app goes to the background, and re-checks and resumes when it comes
+/// back (the user may have changed the location settings meanwhile).
+class _ForegroundLocation extends StatefulWidget {
+  const _ForegroundLocation({required this.child});
+  final Widget child;
+
+  @override
+  State<_ForegroundLocation> createState() => _ForegroundLocationState();
+}
+
+class _ForegroundLocationState extends State<_ForegroundLocation> {
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    final location = context.read<LocationController>();
+    _lifecycle = AppLifecycleListener(
+      onPause: location.pause,
+      onResume: location.resume,
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

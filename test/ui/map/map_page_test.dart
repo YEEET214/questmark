@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
+import 'package:questmark/services/location_service.dart';
+import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/state/map_focus_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
 import 'package:questmark/ui/map/map_config.dart';
@@ -13,6 +15,7 @@ import 'package:questmark/ui/map/quest_details_sheet.dart';
 import 'package:questmark/ui/map/quest_marker.dart';
 import 'package:questmark/ui/tasks/task_editor_page.dart';
 
+import '../../helpers/fake_location_service.dart';
 import '../../helpers/fake_task_repository.dart';
 
 void main() {
@@ -36,15 +39,23 @@ void main() {
 
   late MapFocusController focus;
   late MapController mapController;
+  late FakeLocationService gps;
+  late FakeLastLocationRepository savedLocation;
+  late LocationController location;
 
   /// Pumps the map page with an empty base layer (no network). Animations
   /// are switched off, so pumpAndSettle can finish despite the bobbing
   /// markers (and camera moves are instant). [before] runs before the map
   /// is built, e.g. to queue a focus request.
+  ///
+  /// Location defaults to "allowed and on, no fix yet". Pass [gpsService]
+  /// / [saved] to change that.
   Future<FakeTaskRepository> pumpMap(
     WidgetTester tester,
     List<Task> tasks, {
     void Function()? before,
+    FakeLocationService? gpsService,
+    FakeLastLocationRepository? saved,
   }) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);
@@ -53,12 +64,16 @@ void main() {
     final repo = FakeTaskRepository(tasks);
     focus = MapFocusController();
     mapController = MapController();
+    gps = gpsService ?? FakeLocationService();
+    savedLocation = saved ?? FakeLastLocationRepository();
+    location = LocationController(gps, savedLocation, clock: () => now);
     before?.call();
     await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider(
             create: (_) => TaskListController(repo, clock: () => now)..load()),
         ChangeNotifierProvider.value(value: focus),
+        ChangeNotifierProvider(create: (_) => location..start()),
       ],
       child: MaterialApp(
         home: MapPage(
@@ -344,6 +359,265 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(focus.highlightedTaskId, isNull);
+    });
+  });
+  group('player position (Phase 5, D8 / D19)', () {
+    final tampere = GeoPoint(61.50, 23.76);
+    final player = find.byKey(const ValueKey('player-marker'));
+
+    void expectCameraAt(double lat, double lng) {
+      expect(mapController.camera.center.latitude, closeTo(lat, 0.0001));
+      expect(mapController.camera.center.longitude, closeTo(lng, 0.0001));
+    }
+
+    Future<void> emit(WidgetTester tester, double lat, double lng) async {
+      gps.emit(fixAt(lat, lng));
+      await tester.pumpAndSettle();
+    }
+
+    Icon myLocationIcon(WidgetTester tester) => tester.widget<Icon>(
+        find.descendant(
+            of: find.byKey(const Key('myLocationButton')),
+            matching: find.byType(Icon)));
+
+    testWidgets('the blue dot appears with the first fix and moves with the '
+        'next ones', (tester) async {
+      await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      expect(player, findsNothing, reason: 'no fix yet');
+
+      await emit(tester, 60.171, 24.941);
+      expect(player, findsOneWidget);
+      final first = tester.getCenter(player);
+
+      await emit(tester, 60.172, 24.946);
+      expect(tester.getCenter(player), isNot(first));
+      expect(
+          find.byWidgetPredicate(
+              (w) => w is Semantics && w.properties.label == 'Your location'),
+          findsOneWidget,
+          reason: 'screen readers announce the dot');
+    });
+
+    testWidgets('the dot disappears when location is switched off',
+        (tester) async {
+      await pumpMap(tester, []);
+      await emit(tester, 60.17, 24.94);
+      expect(player, findsOneWidget);
+
+      gps.setServiceEnabled(false);
+      await tester.pumpAndSettle();
+      expect(player, findsNothing);
+      expect(myLocationIcon(tester).icon, Icons.location_disabled);
+    });
+
+    group('starting view', () {
+      testWidgets('starts at the saved last-known position, ahead of the '
+          'quests', (tester) async {
+        await pumpMap(
+          tester,
+          [seed(1, 'a', at: helsinki), seed(2, 'b', at: tampere)],
+          saved: FakeLastLocationRepository(fixAt(51.5, -0.12)),
+        );
+        expectCameraAt(51.5, -0.12);
+        expect(mapController.camera.zoom, MapConfig.playerZoom);
+      });
+
+      testWidgets('without a saved position it fits the quests (as before)',
+          (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        expectCameraAt(helsinki.latitude, helsinki.longitude);
+      });
+
+      testWidgets('the first fix glides the camera to the user if the map '
+          'was not touched', (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        await emit(tester, 61.0, 25.0);
+        expectCameraAt(61.0, 25.0);
+        expect(mapController.camera.zoom, MapConfig.playerZoom);
+
+        // Later fixes don't move the camera (no follow mode yet).
+        await emit(tester, 61.01, 25.0);
+        expectCameraAt(61.0, 25.0);
+      });
+
+      testWidgets('...but not after the user has dragged the map',
+          (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        await tester.drag(find.byType(FlutterMap), const Offset(120, 0));
+        await tester.pumpAndSettle();
+        final before = mapController.camera.center;
+
+        await emit(tester, 61.0, 25.0);
+        expect(mapController.camera.center, before);
+      });
+
+      testWidgets('...and not when the map opened on a "Show on map" quest',
+          (tester) async {
+        await pumpMap(
+          tester,
+          [seed(1, 'a', at: helsinki), seed(2, 'b', at: tampere)],
+          before: () => focus.focusOn(seed(2, 'b', at: tampere)),
+        );
+        await emit(tester, 61.0, 25.0);
+        expectCameraAt(61.50, 23.76);
+      });
+
+      testWidgets('...and not when a zoom button was used', (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        await tapByKey(tester, 'zoomOutButton');
+        await emit(tester, 61.0, 25.0);
+        expectCameraAt(helsinki.latitude, helsinki.longitude);
+      });
+    });
+
+    group('my-location button', () {
+      testWidgets('centres on the user and follows until the map is dragged',
+          (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        await tester.drag(find.byType(FlutterMap), const Offset(120, 0));
+        await tester.pumpAndSettle();
+        await emit(tester, 61.0, 25.0); // touched: camera stays
+        expect(myLocationIcon(tester).icon, Icons.location_searching);
+
+        await tapByKey(tester, 'myLocationButton');
+        expectCameraAt(61.0, 25.0);
+        expect(myLocationIcon(tester).icon, Icons.my_location);
+
+        await emit(tester, 61.2, 25.3);
+        expectCameraAt(61.2, 25.3);
+
+        await tester.drag(find.byType(FlutterMap), const Offset(0, 120));
+        await tester.pumpAndSettle();
+        expect(myLocationIcon(tester).icon, Icons.location_searching);
+        final before = mapController.camera.center;
+        await emit(tester, 61.4, 25.5);
+        expect(mapController.camera.center, before, reason: 'not following');
+      });
+
+      testWidgets('zooming with the buttons keeps following', (tester) async {
+        await pumpMap(tester, []);
+        await emit(tester, 61.0, 25.0);
+        await tapByKey(tester, 'myLocationButton');
+        await tapByKey(tester, 'zoomInButton');
+        expect(myLocationIcon(tester).icon, Icons.my_location);
+        await emit(tester, 61.1, 25.1);
+        expectCameraAt(61.1, 25.1);
+      });
+
+      testWidgets('keeps a closer zoom instead of zooming out to street level',
+          (tester) async {
+        await pumpMap(tester, []);
+        await emit(tester, 61.0, 25.0);
+        mapController.move(mapController.camera.center, 18);
+        await tester.pumpAndSettle();
+        await tapByKey(tester, 'myLocationButton');
+        expect(mapController.camera.zoom, 18);
+      });
+
+      testWidgets('before the first fix: says it is looking, then centres '
+          'when the fix arrives', (tester) async {
+        await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+        await tapByKey(tester, 'myLocationButton');
+        expect(find.text('Finding your location…'), findsOneWidget);
+
+        await emit(tester, 61.0, 25.0);
+        expectCameraAt(61.0, 25.0);
+      });
+
+      testWidgets('when blocked: explains and offers the app settings',
+          (tester) async {
+        await pumpMap(tester, [],
+            gpsService: FakeLocationService(
+                permission: LocationPermissionState.deniedForever));
+        expect(find.byKey(const Key('locationPrompt')), findsNothing,
+            reason: 'the OS would not show its dialog anyway');
+        expect(myLocationIcon(tester).icon, Icons.location_disabled);
+
+        await tapByKey(tester, 'myLocationButton');
+        expect(find.text('Location access is blocked'), findsOneWidget);
+        await tester.tap(find.text('Open settings'));
+        await tester.pumpAndSettle();
+        expect(gps.openedAppSettings, 1);
+        expect(gps.requestCount, 0);
+      });
+
+      testWidgets('when location is off: offers the location settings',
+          (tester) async {
+        await pumpMap(tester, [],
+            gpsService: FakeLocationService(serviceEnabled: false));
+        await tapByKey(tester, 'myLocationButton');
+        expect(find.text('Location is turned off'), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(gps.openedLocationSettings, 0);
+
+        await tapByKey(tester, 'myLocationButton');
+        await tester.tap(find.text('Open settings'));
+        await tester.pumpAndSettle();
+        expect(gps.openedLocationSettings, 1);
+      });
+
+      testWidgets('when not allowed yet: asks, then follows', (tester) async {
+        await pumpMap(tester, [],
+            gpsService: FakeLocationService(
+                permission: LocationPermissionState.denied));
+        await tapByKey(tester, 'myLocationButton');
+        expect(gps.requestCount, 1);
+        expect(location.status, LocationStatus.on);
+
+        await emit(tester, 61.0, 25.0);
+        expectCameraAt(61.0, 25.0);
+        expect(myLocationIcon(tester).icon, Icons.my_location);
+      });
+    });
+
+    group('permission prompt (explain before asking)', () {
+      Future<void> pumpDenied(WidgetTester tester,
+          {LocationPermissionState answer = LocationPermissionState.granted}) {
+        return pumpMap(tester, [],
+            gpsService: FakeLocationService(
+                permission: LocationPermissionState.denied,
+                permissionAfterRequest: answer));
+      }
+
+      final prompt = find.byKey(const Key('locationPrompt'));
+
+      testWidgets('is shown while not allowed, without asking the OS yet',
+          (tester) async {
+        await pumpDenied(tester);
+        expect(prompt, findsOneWidget);
+        expect(
+            find.text('See where you are among your quests'), findsOneWidget);
+        expect(gps.requestCount, 0);
+      });
+
+      testWidgets('"Allow" shows the OS dialog; granting hides the prompt',
+          (tester) async {
+        await pumpDenied(tester);
+        await tester.tap(find.text('Allow'));
+        await tester.pumpAndSettle();
+        expect(gps.requestCount, 1);
+        expect(prompt, findsNothing);
+        expect(gps.isListening, isTrue);
+      });
+
+      testWidgets('refusing in the OS dialog also hides it for this session',
+          (tester) async {
+        await pumpDenied(tester, answer: LocationPermissionState.denied);
+        await tester.tap(find.text('Allow'));
+        await tester.pumpAndSettle();
+        expect(prompt, findsNothing);
+        expect(location.status, LocationStatus.denied);
+      });
+
+      testWidgets('"Not now" hides it without asking', (tester) async {
+        await pumpDenied(tester);
+        await tester.tap(find.text('Not now'));
+        await tester.pumpAndSettle();
+        expect(prompt, findsNothing);
+        expect(gps.requestCount, 0);
+      });
     });
   });
 }

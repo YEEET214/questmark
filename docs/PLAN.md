@@ -457,8 +457,9 @@ zoom out to see all quests.
   the build with a message instead of installing silently. The user
   decided to **keep** CMake 3.22.1, since it's needed to build the app.
 
-### D16. Task list search, filters and sorting (Phase 4b, planned)
-*Specified by the user during the PR #4 review. Not built yet.*
+### D16. Task list search, filters and sorting (Phase 4b)
+*Specified by the user during the PR #4 review. Built in Phase 4b; see
+"As built" at the end of this section.*
 
 **Problem:** ticking a task moves it straight into the Completed section,
 so a wrongly ticked task has to be hunted down to untick it.
@@ -507,6 +508,46 @@ rejected: the task would still jump away.)
   The task tile, editor, map and details sheet are unchanged.
 * **Numbered "4b"** so that the later phases keep their numbers, because
   code comments and decisions already refer to them (e.g. "Phase 8a").
+
+**As built (Phase 4b):**
+* **Default sort: due date, ascending.** The most urgent quests come
+  first, and quests without a due date come last. Ties: newest created
+  first, then highest id, so the order is always stable.
+* **The repository's order is now simply "newest created first".** It is
+  only a stable default. All visible ordering comes from `TaskQuery`, so
+  ticking a task never moves it.
+* **`TaskQuery`** (`lib/models/task_query.dart`) is an immutable value
+  holding the search, status, three `DayRange`s and the sort. Its `apply()`
+  is pure. **`DayRange`** stores local calendar days, with optional
+  `from`/`to` ends that are both inclusive; `from` after `to` is rejected.
+* **`TaskListViewController`** (app-wide) holds the query and the
+  "kept visible" ids. It's app-wide so the filter sheet (a separate route)
+  can reach it, and the query survives tab switches during a session.
+  * Changing any filter, including the search text, releases kept tasks.
+    Changing only the sort doesn't.
+  * Leaving the Quests tab releases them too.
+  * Kept tasks skip only the *status* filter; search and dates still
+    apply.
+* **Layout:**
+  * A rounded search field under the app bar; it filters as you type,
+    since the search runs on the phone's own list and needs no network.
+  * Status chips (All / Not completed / Completed / Overdue).
+  * Removable chips for active date filters, e.g. "Due: 01-12-2026 –
+    10-12-2026 ✕". Tapping one reopens the sheet.
+  * App bar: a **sort** menu (four fields + Ascending/Descending, with
+    check marks) and a **filter** button (with a dot when date filters
+    are active).
+* **Date filter sheet:** each of the three dates has a **From** and a
+  **To** button. From only = on or after; To only = on or before; both =
+  between. The pickers can't produce an invalid range. The sheet edits a
+  draft, and nothing changes until **Apply**.
+* **Completing from the list** shows "Completed "x"" with **Undo**.
+  Reopening shows no snackbar, since it is the "undo" direction itself.
+* Done tasks show **"Completed dd-mm-yyyy"** in their subtitle when the
+  date is known.
+* "No quests match" (with **Clear filters**) is shown when filters hide
+  everything, as opposed to "No quests yet" when there are no tasks at
+  all.
 
 ### D17. Completed quests hidden on the map by default (Phase 4, planned)
 *User decision during the PR #4 review.*
@@ -625,15 +666,15 @@ push branch → open PR → progress report → you review → merge PR into
 | **1. Data layer** | ✅ Done (PR #2) | `feature/01-data-layer` | `Task` model, SQLite helper with migrations, `TaskRepository` (CRUD) | toMap/fromMap round trip, lat/lng validation, CRUD on in-memory DB, migration |
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | ✅ Done (PR #4) | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
-| **4. Show on map** | 🚧 In progress | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
-| **4b. List search, filter & sort** | ⬜ Planned | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
+| **4. Show on map** | ✅ Done (PR #6) | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
+| **4b. List search, filter & sort** | 🚧 In progress | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there | — |
+| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas | — |
 
 ---
 

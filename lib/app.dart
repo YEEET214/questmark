@@ -5,6 +5,7 @@ import 'data/task_repository.dart';
 import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
 import 'state/task_list_controller.dart';
+import 'state/task_list_view_controller.dart';
 import 'ui/home_shell.dart';
 import 'ui/map/base_map_layer.dart';
 import 'ui/theme.dart';
@@ -40,6 +41,9 @@ class QuestMarkApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<MapFocusController>(
           create: (_) => MapFocusController(),
+        ),
+        ChangeNotifierProvider<TaskListViewController>(
+          create: (_) => TaskListViewController(),
         ),
         ChangeNotifierProvider<TaskListController>(
           create: (_) => TaskListController(taskRepository)..load(),

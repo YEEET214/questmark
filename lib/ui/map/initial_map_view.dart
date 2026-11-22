@@ -80,6 +80,7 @@ sealed class InitialMapView {
   /// Converts to flutter_map options.
   MapOptions toMapOptions({
     MapTapCallback? onTap,
+    MapTapCallback? onLongPress,
     MapPositionCallback? onPositionChanged,
   });
 }
@@ -90,12 +91,14 @@ class WorldView extends InitialMapView {
   @override
   MapOptions toMapOptions({
     MapTapCallback? onTap,
+    MapTapCallback? onLongPress,
     MapPositionCallback? onPositionChanged,
   }) =>
       _options(
         initialCenter: MapConfig.worldCenter,
         initialZoom: MapConfig.worldZoom,
         onTap: onTap,
+        onLongPress: onLongPress,
         onPositionChanged: onPositionChanged,
       );
 }
@@ -108,12 +111,14 @@ class CenterView extends InitialMapView {
   @override
   MapOptions toMapOptions({
     MapTapCallback? onTap,
+    MapTapCallback? onLongPress,
     MapPositionCallback? onPositionChanged,
   }) =>
       _options(
         initialCenter: center,
         initialZoom: zoom,
         onTap: onTap,
+        onLongPress: onLongPress,
         onPositionChanged: onPositionChanged,
       );
 }
@@ -125,6 +130,7 @@ class FitView extends InitialMapView {
   @override
   MapOptions toMapOptions({
     MapTapCallback? onTap,
+    MapTapCallback? onLongPress,
     MapPositionCallback? onPositionChanged,
   }) =>
       _options(
@@ -135,6 +141,7 @@ class FitView extends InitialMapView {
           maxZoom: MapConfig.questZoom,
         ),
         onTap: onTap,
+        onLongPress: onLongPress,
         onPositionChanged: onPositionChanged,
       );
 }
@@ -144,6 +151,7 @@ MapOptions _options({
   double initialZoom = MapConfig.worldZoom,
   CameraFit? initialCameraFit,
   MapTapCallback? onTap,
+  MapTapCallback? onLongPress,
   MapPositionCallback? onPositionChanged,
 }) =>
     MapOptions(
@@ -153,6 +161,7 @@ MapOptions _options({
       minZoom: MapConfig.minZoom,
       maxZoom: MapConfig.maxZoom,
       onTap: onTap,
+      onLongPress: onLongPress,
       onPositionChanged: onPositionChanged,
       interactionOptions: const InteractionOptions(
         // A to-do map doesn't need rotation, and accidental rotation while

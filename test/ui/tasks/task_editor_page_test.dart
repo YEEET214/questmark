@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
+import 'package:questmark/ui/map/location_picker_page.dart';
 import 'package:questmark/ui/tasks/task_editor_page.dart';
 
 void main() {
@@ -12,6 +13,8 @@ void main() {
   Future<TaskEditorResult? Function()> openEditor(
     WidgetTester tester, {
     Task? initial,
+    GeoPoint? initialLocation,
+    LocationPicker? pickLocation,
   }) async {
     TaskEditorResult? result;
     await tester.pumpWidget(MaterialApp(
@@ -20,8 +23,13 @@ void main() {
           onPressed: () async {
             result = await Navigator.of(context).push<TaskEditorResult>(
               MaterialPageRoute(
-                builder: (_) =>
-                    TaskEditorPage(initial: initial, clock: () => today),
+                builder: (_) => TaskEditorPage(
+                  initial: initial,
+                  initialLocation: initialLocation,
+                  clock: () => today,
+                  pickLocation: pickLocation ??
+                      (_, _) => throw StateError('picker not expected'),
+                ),
               ),
             );
           },
@@ -145,6 +153,150 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(result(), isNull);
+    });
+  });
+  group('location (Phase 6, D23)', () {
+    final helsinki = GeoPoint(60.17, 24.94);
+    final tampere = GeoPoint(61.5, 23.76);
+
+    /// A fake picker that records what it was opened with and answers
+    /// [answer] (null = cancelled).
+    ({LocationPicker picker, List<GeoPoint?> openedWith}) fakePicker(
+        GeoPoint? answer) {
+      final openedWith = <GeoPoint?>[];
+      return (
+        picker: (_, current) async {
+          openedWith.add(current);
+          return answer;
+        },
+        openedWith: openedWith,
+      );
+    }
+
+    Future<TaskEditorSaved> save(
+        WidgetTester tester, TaskEditorResult? Function() result) async {
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      return result() as TaskEditorSaved;
+    }
+
+    testWidgets('a new quest has no location; "Pick on map" sets one',
+        (tester) async {
+      final fake = fakePicker(helsinki);
+      final result = await openEditor(tester, pickLocation: fake.picker);
+      expect(find.text('No location'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('titleField')), 'Quest');
+      await tester.tap(find.byKey(const Key('pickLocationButton')));
+      await tester.pumpAndSettle();
+      expect(fake.openedWith, [null]);
+      expect(find.text('Pinned on the map'), findsOneWidget);
+      expect(find.text('60.17000, 24.94000'), findsOneWidget);
+
+      final saved = await save(tester, result);
+      expect(saved.location, helsinki);
+      expect(saved.address, isNull);
+    });
+
+    testWidgets('cancelling the picker changes nothing', (tester) async {
+      final result =
+          await openEditor(tester, pickLocation: fakePicker(null).picker);
+      await tester.enterText(find.byKey(const Key('titleField')), 'Quest');
+      await tester.tap(find.byKey(const Key('pickLocationButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('No location'), findsOneWidget);
+      expect((await save(tester, result)).location, isNull);
+    });
+
+    testWidgets('a location from a map long-press is pre-filled',
+        (tester) async {
+      final result = await openEditor(tester, initialLocation: tampere);
+      expect(find.text('61.50000, 23.76000'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('titleField')), 'Quest');
+      expect((await save(tester, result)).location, tampere);
+    });
+
+    group('editing a quest that has a location and address', () {
+      final task = Task(
+        id: 3,
+        title: 'Library',
+        createdAt: DateTime.utc(2026, 1, 1),
+        location: helsinki,
+        address: 'Oodi, Helsinki',
+      );
+
+      testWidgets('shows the address and coordinates; saving keeps both',
+          (tester) async {
+        final result = await openEditor(tester, initial: task);
+        expect(find.text('Oodi, Helsinki'), findsOneWidget);
+        expect(find.text('60.17000, 24.94000'), findsOneWidget);
+        final saved = await save(tester, result);
+        expect(saved.location, helsinki);
+        expect(saved.address, 'Oodi, Helsinki');
+      });
+
+      testWidgets('tapping the row opens the picker at the current location; '
+          'a new point clears the old address', (tester) async {
+        final fake = fakePicker(tampere);
+        final result =
+            await openEditor(tester, initial: task, pickLocation: fake.picker);
+        await tester.tap(find.byKey(const Key('locationTile')));
+        await tester.pumpAndSettle();
+        expect(fake.openedWith, [helsinki]);
+        expect(find.text('Oodi, Helsinki'), findsNothing);
+
+        final saved = await save(tester, result);
+        expect(saved.location, tampere);
+        expect(saved.address, isNull);
+      });
+
+      testWidgets('picking the same point keeps the address', (tester) async {
+        final result = await openEditor(tester,
+            initial: task, pickLocation: fakePicker(helsinki).picker);
+        await tester.tap(find.byKey(const Key('locationTile')));
+        await tester.pumpAndSettle();
+        expect((await save(tester, result)).address, 'Oodi, Helsinki');
+      });
+
+      testWidgets('after removing it, the picker reopens at the removed '
+          'location, not at the user (PR #10 review)', (tester) async {
+        final fake = fakePicker(tampere);
+        final result =
+            await openEditor(tester, initial: task, pickLocation: fake.picker);
+        await tester.tap(find.byKey(const Key('clearLocationButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('pickLocationButton')));
+        await tester.pumpAndSettle();
+        expect(fake.openedWith, [helsinki]);
+
+        final saved = await save(tester, result);
+        expect(saved.location, tampere);
+        expect(saved.address, isNull, reason: 'a new point, no address yet');
+      });
+
+      testWidgets('removing, then picking the same point again brings its '
+          'address back', (tester) async {
+        final result = await openEditor(tester,
+            initial: task, pickLocation: fakePicker(helsinki).picker);
+        await tester.tap(find.byKey(const Key('clearLocationButton')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('pickLocationButton')));
+        await tester.pumpAndSettle();
+        expect(find.text('Oodi, Helsinki'), findsOneWidget);
+        expect((await save(tester, result)).address, 'Oodi, Helsinki');
+      });
+
+      testWidgets('the location can be removed (address too)',
+          (tester) async {
+        final result = await openEditor(tester, initial: task);
+        await tester.tap(find.byKey(const Key('clearLocationButton')));
+        await tester.pumpAndSettle();
+        expect(find.text('No location'), findsOneWidget);
+
+        final saved = await save(tester, result);
+        expect(saved.location, isNull);
+        expect(saved.address, isNull);
+      });
     });
   });
 }

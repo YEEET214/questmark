@@ -142,6 +142,12 @@ void main() {
       expect(controller.locatedTasks, contains(saved));
     });
 
+    test('add keeps an address that goes with the location', () async {
+      final saved = await controller.add(
+          title: 'Library', location: GeoPoint(1, 2), address: 'Main St 1');
+      expect((await repo.getById(saved.id!))!.address, 'Main St 1');
+    });
+
     test('save updates an existing task', () async {
       final t = controller.tasks.single;
       await controller.save(t.copyWith(title: 'renamed'));

@@ -8,6 +8,7 @@ import 'package:questmark/services/location_service.dart';
 import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/state/map_focus_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
+import 'package:questmark/ui/map/map_attribution.dart';
 import 'package:questmark/ui/map/map_config.dart';
 import 'package:questmark/ui/map/map_controls.dart';
 import 'package:questmark/ui/map/map_page.dart';
@@ -102,7 +103,25 @@ void main() {
     await pumpMap(tester, []);
     expect(find.byType(FlutterMap), findsOneWidget);
     expect(find.byType(QuestMarker), findsNothing);
-    expect(find.byType(RichAttributionWidget), findsOneWidget);
+    expect(find.byType(MapAttribution), findsOneWidget);
+  });
+
+  testWidgets('the open attribution card is on top of the map buttons '
+      '(PR #10 review)', (tester) async {
+    await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+    final zoomBefore = mapController.camera.zoom;
+    await tapByKey(tester, 'attributionButton');
+
+    final card = tester.getRect(find.byKey(const Key('attributionCard')));
+    final zoomOut = find.byKey(const Key('zoomOutButton'));
+    // The test only means something if they really overlap.
+    expect(card.overlaps(tester.getRect(zoomOut)), isTrue);
+
+    // A tap there lands on the card, not on the button underneath.
+    await tester.tap(zoomOut, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(mapController.camera.zoom, zoomBefore);
+    expect(find.byKey(const Key('attributionCard')), findsOneWidget);
   });
 
   testWidgets('one marker per located quest; list-only quests are skipped',
@@ -618,6 +637,40 @@ void main() {
         expect(prompt, findsNothing);
         expect(gps.requestCount, 0);
       });
+    });
+  });
+  group('long-press: new quest at that spot (Phase 6, D23)', () {
+    testWidgets('opens the new-quest editor with that point; saving puts a '
+        'marker there', (tester) async {
+      final repo = await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      final mapRect = tester.getRect(find.byType(FlutterMap));
+      final spot = mapRect.center + const Offset(-60, 90);
+      final expected =
+          mapController.camera.screenOffsetToLatLng(spot - mapRect.topLeft);
+
+      await tester.longPressAt(spot);
+      await tester.pumpAndSettle();
+      expect(find.text('New quest'), findsOneWidget);
+      expect(find.text('Pinned on the map'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('titleField')), 'Here!');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final created =
+          (await repo.getAll()).singleWhere((t) => t.title == 'Here!');
+      expect(created.location!.latitude, closeTo(expected.latitude, 1e-6));
+      expect(created.location!.longitude, closeTo(expected.longitude, 1e-6));
+      expect(markerFor(created.id!), findsOneWidget);
+    });
+
+    testWidgets('backing out of the editor creates nothing', (tester) async {
+      final repo = await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      await tester.longPressAt(tester.getCenter(find.byType(FlutterMap)));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(await repo.getAll(), hasLength(1));
     });
   });
 }

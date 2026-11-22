@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/geo_point.dart';
 import '../../models/task.dart';
 import '../../state/map_focus_controller.dart';
 import '../../state/navigation_controller.dart';
@@ -15,25 +16,45 @@ import 'task_editor_page.dart';
 /// that editing, deleting and undo behave the same everywhere.
 
 /// Opens the editor for [task] (or a new task when null) and applies the
-/// result: save, create, or delete with undo.
-Future<void> openTaskEditor(BuildContext context, Task? task) async {
+/// result: save, create, or delete with undo. [location] pre-fills a new
+/// task's location (long-press on the map).
+Future<void> openTaskEditor(
+  BuildContext context,
+  Task? task, {
+  GeoPoint? location,
+}) async {
   final controller = context.read<TaskListController>();
   final result = await Navigator.of(context).push<TaskEditorResult>(
-    MaterialPageRoute(builder: (_) => TaskEditorPage(initial: task)),
+    MaterialPageRoute(
+      builder: (_) => TaskEditorPage(initial: task, initialLocation: location),
+    ),
   );
   if (result == null || !context.mounted) return;
 
   switch (result) {
-    case TaskEditorSaved(:final title, :final description, :final dueAt):
+    case TaskEditorSaved(
+        :final title,
+        :final description,
+        :final dueAt,
+        :final location,
+        :final address,
+      ):
       await runGuarded(context, () async {
         if (task == null) {
           await controller.add(
-              title: title, description: description, dueAt: dueAt);
+            title: title,
+            description: description,
+            dueAt: dueAt,
+            location: location,
+            address: address,
+          );
         } else {
           await controller.save(task.copyWith(
             title: title,
             description: () => description,
             dueAt: () => dueAt,
+            location: () => location,
+            address: () => address,
           ));
         }
       });

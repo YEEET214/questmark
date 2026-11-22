@@ -87,12 +87,14 @@ class TaskListController extends ChangeNotifier {
     String? description,
     DateTime? dueAt,
     GeoPoint? location,
+    String? address,
   }) async {
     final saved = await _repository.insert(Task(
       title: title,
       description: description,
       dueAt: dueAt,
       location: location,
+      address: address,
       createdAt: _clock(),
     ));
     await _refresh();

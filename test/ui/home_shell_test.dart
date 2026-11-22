@@ -185,4 +185,43 @@ void main() {
       expect(gps.isListening, isTrue);
     });
   });
+  group('placing a quest with the picker (full app, Phase 6)', () {
+    testWidgets('New quest -> Pick on map -> Use this location -> Save: the '
+        'quest gets that location and can be shown on the map',
+        (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      final repo = FakeTaskRepository();
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: repo,
+        locationService: FakeLocationService(),
+        // The picker starts at the last known position.
+        lastLocationRepository:
+            FakeLastLocationRepository(fixAt(60.17, 24.94)),
+        mapBaseLayer: const SizedBox.shrink(),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('New quest'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('titleField')), 'Pinned');
+      await tester.tap(find.byKey(const Key('pickLocationButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('Pick location'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('useLocationButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('60.17000, 24.94000'), findsOneWidget);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final saved = (await repo.getAll()).single;
+      expect(saved.location!.latitude, closeTo(60.17, 1e-6));
+      expect(saved.location!.longitude, closeTo(24.94, 1e-6));
+      expect(find.byTooltip('Show on map'), findsOneWidget);
+    });
+  });
 }

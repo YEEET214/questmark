@@ -26,8 +26,8 @@ enum MyLocationButtonState {
 class MapControls extends StatelessWidget {
   const MapControls({
     super.key,
-    required this.showCompleted,
-    required this.onToggleCompleted,
+    this.showCompleted = false,
+    this.onToggleCompleted,
     required this.onZoomIn,
     required this.onZoomOut,
     required this.myLocation,
@@ -37,7 +37,10 @@ class MapControls extends StatelessWidget {
   final MyLocationButtonState myLocation;
   final VoidCallback onMyLocation;
   final bool showCompleted;
-  final VoidCallback onToggleCompleted;
+
+  /// The completed-quests toggle is left out when this is null (the
+  /// location picker has no quests to toggle).
+  final VoidCallback? onToggleCompleted;
   final VoidCallback? onZoomIn;
   final VoidCallback? onZoomOut;
 
@@ -66,18 +69,20 @@ class MapControls extends StatelessWidget {
             onPressed: onMyLocation,
           ),
         ),
-        const SizedBox(height: 8),
-        _Panel(
-          child: _ControlButton(
-            key: const Key('toggleCompletedButton'),
-            tooltip: showCompleted ? 'Hide completed' : 'Show completed',
-            icon: showCompleted
-                ? Icons.check_circle
-                : Icons.check_circle_outline,
-            selected: showCompleted,
-            onPressed: onToggleCompleted,
+        if (onToggleCompleted != null) ...[
+          const SizedBox(height: 8),
+          _Panel(
+            child: _ControlButton(
+              key: const Key('toggleCompletedButton'),
+              tooltip: showCompleted ? 'Hide completed' : 'Show completed',
+              icon: showCompleted
+                  ? Icons.check_circle
+                  : Icons.check_circle_outline,
+              selected: showCompleted,
+              onPressed: onToggleCompleted,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 8),
         _Panel(
           child: Column(

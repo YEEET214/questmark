@@ -283,6 +283,7 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
   stricter Play Store / App Store permissions.
 * The map has a "re-centre on me" button and an optional follow mode.
 * On start-up the map centres on the user (D19).
+* As built, with the details of the prompt and follow mode: D22.
 
 ### D9. Quest-marker visual language
 | State | Marker |
@@ -635,7 +636,7 @@ at the end of this section.*
   permanently, including any in the bin, so test data doesn't fill the
   bin.
 
-### D19. Map starts centred on the user (Phase 5, planned)
+### D19. Map starts centred on the user (Phase 5; as built: D22)
 *User decision, after PR #4.* When the app starts, the map's camera is
 chosen in this order:
 1. **Current GPS position**, if location services are on and permission is
@@ -712,6 +713,64 @@ chosen in this order:
 * A full-app widget test covers the real nesting. It was confirmed to
   fail without the fix.
 
+### D22. GPS as built (Phase 5)
+Builds D8 and D19. Code: `LocationService` (interface, `geolocator`
+behind it), `LocationController` (app state), `LastLocationRepository`
+(SQLite, schema v4), and the map's player dot, my-location button and
+permission prompt.
+* **The app never asks for permission by itself.** At start-up it only
+  *checks*. While permission can still be asked, the map shows a small
+  card: "See where you are among your quests … never leaves your phone",
+  with **Allow** / **Not now**. The OS dialog appears only after
+  **Allow** (D8's "explain → request"). "Not now", or refusing in the OS
+  dialog, hides the card for the rest of the app session; the
+  my-location button can still ask. *Why:* a bare OS dialog at launch,
+  before the user has even seen the map, is the most common reason people
+  refuse, and Android stops showing the dialog after two refusals.
+* **"Blocked" and "location off"** are handled by the my-location button
+  (crossed-out icon): tapping it explains the problem and offers **Open
+  settings** (the app's settings page, or the phone's location settings).
+  No card is shown for these, because the app can't fix them itself.
+* **My-location button** (top of the map controls, Google-Maps style):
+  * Tap: centre on the user at street level (zoom 15, or keep a closer
+    zoom) and **follow** them: the camera moves with each new fix.
+  * **Dragging or pinching the map ends follow mode.** The zoom buttons
+    don't: they zoom around the centre, which is the user.
+  * Icons: filled crosshair = following, empty = available, crossed out =
+    unavailable. Before the first fix: "Finding your location…".
+* **Player marker:** a blue dot with a white ring, inside a pale accuracy
+  circle drawn in metres (not drawn above 2 km: that circle would only
+  cover the screen). It's drawn *below* the quest markers, so a quest at
+  the user's position can still be tapped. No heading arrow: the GPS
+  heading is only meaningful while moving, so it would mostly point
+  nowhere.
+* **The dot disappears** when location becomes unavailable (switched off,
+  permission withdrawn). The map never shows a stale position as if it
+  were live; the saved position is used only for the starting camera.
+* **Start-up (D19):** a pending "Show on map" request → live fix → saved
+  last-known position → fit the quests. Because the map is built at app
+  start (kept alive in the `IndexedStack`), there's normally no live fix
+  yet. The first fix then glides the camera to the user, unless the user
+  has already dragged the map, used a map button or "Show on map".
+* **Saving the last-known position:** the first fix, then at most once a
+  minute, plus once when the app goes to the background (so the latest
+  position isn't lost). One row only (`last_location`, `id = 1`), never
+  a history.
+* **Foreground only:** the GPS stream stops when the app goes to the
+  background and restarts when it returns. Permission and the location
+  setting are re-checked then, because the user may have changed them in
+  the system settings. The phone's location switch is also watched while
+  the app is open.
+* **Robustness:** if the GPS stream fails while everything looks allowed,
+  it's retried after 5 s, never in a tight loop. Location errors never
+  crash the app; they only change the status.
+* Updates only after moving ≥ 5 m (`distanceFilter`), high accuracy.
+* **Build note:** `android/gradle.properties` now sets
+  `kotlin.incremental=false`. Kotlin's incremental compiler failed
+  ("Could not close incremental caches") because the plugins' sources (pub
+  cache on C:) and the project (D:) are on different drives. This is
+  project-local and only makes Kotlin compiles slightly slower.
+
 ---
 
 ## 4. Phases
@@ -728,8 +787,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **3. Map + quest markers** | ✅ Done (PR #4) | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
 | **4. Show on map** | ✅ Done (PR #6) | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
 | **4b. List search, filter & sort** | ✅ Done (PR #7) | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
-| **4c. Recycle bin** | 🚧 In progress | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
-| **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
+| **4c. Recycle bin** | ✅ Done (PR #8) | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
+| **5. GPS** | 🚧 In progress | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |

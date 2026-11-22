@@ -100,6 +100,9 @@ class _TaskListPageState extends State<TaskListPage> {
               },
             ),
           ],
+          // Always available, even with no quests, so the recycle bin can
+          // always be reached.
+          _MoreMenu(hasCompleted: controller.completedTasks.isNotEmpty),
           // TEMPORARY: debug-only developer tools (removed before release).
           const DevToolsButton(),
         ],
@@ -317,6 +320,47 @@ class _DateFilterChips extends StatelessWidget {
               ),
         ],
       ),
+    );
+  }
+}
+
+enum _MoreAction { deleteCompleted, recycleBin }
+
+/// The "⋮" menu: "Delete all completed tasks" (disabled when there are
+/// none) and "Recycle bin" (PLAN.md D18).
+class _MoreMenu extends StatelessWidget {
+  const _MoreMenu({required this.hasCompleted});
+
+  final bool hasCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_MoreAction>(
+      tooltip: 'More options',
+      onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
+      onSelected: (action) => switch (action) {
+        _MoreAction.deleteCompleted => deleteAllCompleted(context),
+        _MoreAction.recycleBin => openRecycleBin(context),
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _MoreAction.deleteCompleted,
+          enabled: hasCompleted,
+          child: const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.playlist_remove),
+            title: Text('Delete all completed tasks'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _MoreAction.recycleBin,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_outline),
+            title: Text('Recycle bin'),
+          ),
+        ),
+      ],
     );
   }
 }

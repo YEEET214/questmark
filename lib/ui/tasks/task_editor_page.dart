@@ -96,7 +96,8 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete quest?'),
-        content: Text('"${widget.initial!.title}" will be removed.'),
+        content: Text('"${widget.initial!.title}" will be moved to the '
+            'recycle bin. You can restore it from there for 30 days.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

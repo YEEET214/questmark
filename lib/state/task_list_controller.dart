@@ -17,18 +17,27 @@ class TaskListController extends ChangeNotifier {
   TaskListController(this._repository, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
+  /// How long a deleted task stays in the recycle bin before it is removed
+  /// for good (PLAN.md D18).
+  static const binRetention = Duration(days: 30);
+
   final TaskRepository _repository;
 
   /// Injected so tests can control `createdAt` timestamps.
   final DateTime Function() _clock;
 
   List<Task> _tasks = const [];
+  List<Task> _binTasks = const [];
   bool _isLoading = false;
   bool _hasLoaded = false;
   Object? _loadError;
 
-  /// All tasks, in repository order (active first, see [TaskRepository]).
+  /// All tasks not in the recycle bin, in repository order (newest
+  /// created first; the list page applies its own sort).
   List<Task> get tasks => _tasks;
+
+  /// Tasks in the recycle bin, most recently deleted first.
+  List<Task> get binTasks => _binTasks;
 
   List<Task> get activeTasks => _tasks.where((t) => !t.isDone).toList();
   List<Task> get completedTasks => _tasks.where((t) => t.isDone).toList();
@@ -52,12 +61,16 @@ class TaskListController extends ChangeNotifier {
   /// UI that triggered the change knows how to report it.
   Object? get loadError => _loadError;
 
-  /// (Re)loads all tasks from the repository.
+  /// (Re)loads all tasks from the repository. Bin tasks older than
+  /// [binRetention] are removed for good first; this is the "on app start"
+  /// purge.
   Future<void> load() async {
     _isLoading = true;
     notifyListeners();
     try {
+      await _purge();
       _tasks = await _repository.getAll();
+      _binTasks = await _repository.getBin();
       _loadError = null;
     } catch (e) {
       _loadError = e;
@@ -102,30 +115,65 @@ class TaskListController extends ChangeNotifier {
     ));
   }
 
-  /// Deletes [task]. Returns it so the caller can offer "Undo" via
-  /// [restore].
-  Future<Task> delete(Task task) async {
-    final id = task.id;
-    if (id == null) throw ArgumentError.value(task, 'task', 'has no id');
-    await _repository.delete(id);
+  /// Moves [task] to the recycle bin. Returns it so the caller can offer
+  /// "Undo" via [restoreFromBin].
+  Future<Task> moveToBin(Task task) async {
+    await _repository.moveToBin(_idOf(task), _clock());
     await _refresh();
     return task;
   }
 
-  /// Puts back a task removed with [delete].
-  ///
-  /// It is re-inserted as a new row, so it gets a new id. Nothing refers
-  /// to task ids long-term, so this is harmless and keeps the repository
-  /// contract simple ("insert never takes an id").
-  Future<Task> restore(Task deleted) async {
-    final saved =
-        await _repository.insert(deleted.withoutId());
+  /// Takes [task] out of the bin. It comes back exactly as it was, with the
+  /// same id. Also used for "Undo" after deleting.
+  Future<void> restoreFromBin(Task task) async {
+    await _repository.restoreFromBin(_idOf(task));
     await _refresh();
-    return saved;
+  }
+
+  /// Moves every completed task to the bin ("Delete all completed tasks").
+  /// Returns how many were moved.
+  Future<int> moveCompletedToBin() async {
+    final moved = await _repository.moveCompletedToBin(_clock());
+    await _refresh();
+    return moved;
+  }
+
+  /// Removes [task] for good.
+  Future<void> deletePermanently(Task task) async {
+    await _repository.deletePermanently(_idOf(task));
+    await _refresh();
+  }
+
+  /// Removes everything in the bin for good. Returns how many.
+  Future<int> emptyBin() async {
+    final removed = await _repository.emptyBin();
+    await _refresh();
+    return removed;
+  }
+
+  /// Removes bin tasks older than [binRetention]. Called when the bin page
+  /// opens, in addition to every [load]. Returns how many were removed.
+  Future<int> purgeExpiredBin() async {
+    final removed = await _purge();
+    if (removed > 0) await _refresh();
+    return removed;
+  }
+
+  /// When [task] (in the bin) will be removed for good.
+  DateTime expiresAt(Task task) => task.deletedAt!.add(binRetention);
+
+  Future<int> _purge() =>
+      _repository.purgeBin(deletedBefore: _clock().subtract(binRetention));
+
+  static int _idOf(Task task) {
+    final id = task.id;
+    if (id == null) throw ArgumentError.value(task, 'task', 'has no id');
+    return id;
   }
 
   Future<void> _refresh() async {
     _tasks = await _repository.getAll();
+    _binTasks = await _repository.getBin();
     _loadError = null;
     notifyListeners();
   }

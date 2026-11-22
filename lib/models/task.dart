@@ -25,6 +25,7 @@ class Task {
     required DateTime createdAt,
     DateTime? dueAt,
     DateTime? completedAt,
+    DateTime? deletedAt,
     String? address,
     this.location,
   })  : title = title.trim(),
@@ -34,7 +35,8 @@ class Task {
         dueAt = dueAt == null ? null : _normalise(dueAt),
         completedAt = (!isDone || completedAt == null)
             ? null
-            : _normalise(completedAt) {
+            : _normalise(completedAt),
+        deletedAt = deletedAt == null ? null : _normalise(deletedAt) {
     if (this.title.isEmpty) {
       throw ArgumentError.value(title, 'title', 'must not be empty');
     }
@@ -51,6 +53,12 @@ class Task {
   /// When the task was ticked. `null` while open, and also for tasks
   /// completed before this was recorded (schema v1): unknown.
   final DateTime? completedAt;
+
+  /// When the task was moved to the recycle bin; `null` if it isn't in the
+  /// bin (schema v3, PLAN.md D18).
+  final DateTime? deletedAt;
+
+  bool get isInBin => deletedAt != null;
 
   /// Human-readable address. Shown in the UI and kept so we never have to
   /// geocode the same task twice.
@@ -89,6 +97,7 @@ class Task {
     DateTime? createdAt,
     ValueGetter<DateTime?>? dueAt,
     ValueGetter<DateTime?>? completedAt,
+    ValueGetter<DateTime?>? deletedAt,
     ValueGetter<String?>? address,
     ValueGetter<GeoPoint?>? location,
   }) {
@@ -100,6 +109,7 @@ class Task {
       createdAt: createdAt ?? this.createdAt,
       dueAt: dueAt != null ? dueAt() : this.dueAt,
       completedAt: completedAt != null ? completedAt() : this.completedAt,
+      deletedAt: deletedAt != null ? deletedAt() : this.deletedAt,
       address: address != null ? address() : this.address,
       location: location != null ? location() : this.location,
     );
@@ -115,6 +125,7 @@ class Task {
         createdAt: createdAt,
         dueAt: dueAt,
         completedAt: completedAt,
+        deletedAt: deletedAt,
         address: address,
         location: location,
       );
@@ -127,6 +138,7 @@ class Task {
   static const colCreatedAt = 'created_at';
   static const colDueAt = 'due_at';
   static const colCompletedAt = 'completed_at'; // schema v2
+  static const colDeletedAt = 'deleted_at'; // schema v3
   static const colAddress = 'address';
   static const colLatitude = 'latitude';
   static const colLongitude = 'longitude';
@@ -142,6 +154,7 @@ class Task {
         colCreatedAt: createdAt.millisecondsSinceEpoch,
         colDueAt: dueAt?.millisecondsSinceEpoch,
         colCompletedAt: completedAt?.millisecondsSinceEpoch,
+        colDeletedAt: deletedAt?.millisecondsSinceEpoch,
         colAddress: address,
         colLatitude: location?.latitude,
         colLongitude: location?.longitude,
@@ -162,6 +175,7 @@ class Task {
     }
     final dueMs = map[colDueAt] as int?;
     final completedMs = map[colCompletedAt] as int?;
+    final deletedMs = map[colDeletedAt] as int?;
     return Task(
       id: map[colId] as int?,
       title: map[colTitle] as String,
@@ -176,6 +190,9 @@ class Task {
       completedAt: completedMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(completedMs, isUtc: true),
+      deletedAt: deletedMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(deletedMs, isUtc: true),
       address: map[colAddress] as String?,
       location: lat == null ? null : GeoPoint(lat, lng!),
     );
@@ -191,12 +208,13 @@ class Task {
       other.createdAt == createdAt &&
       other.dueAt == dueAt &&
       other.completedAt == completedAt &&
+      other.deletedAt == deletedAt &&
       other.address == address &&
       other.location == location;
 
   @override
   int get hashCode => Object.hash(id, title, description, isDone, createdAt,
-      dueAt, completedAt, address, location);
+      dueAt, completedAt, deletedAt, address, location);
 
   @override
   String toString() =>

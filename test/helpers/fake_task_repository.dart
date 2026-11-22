@@ -79,14 +79,11 @@ class FakeTaskRepository implements TaskRepository {
     writes++;
   }
 
-  /// Same rules as the SQL ORDER BY in SqfliteTaskRepository.
+  /// Same rule as the SQL ORDER BY in SqfliteTaskRepository: newest
+  /// created first, then highest id.
   static List<Task> _sorted(Iterable<Task> tasks) {
     final list = tasks.toList();
     list.sort((a, b) {
-      if (a.isDone != b.isDone) return a.isDone ? 1 : -1;
-      final ad = a.dueAt, bd = b.dueAt;
-      if ((ad == null) != (bd == null)) return ad == null ? 1 : -1;
-      if (ad != null && bd != null && ad != bd) return ad.compareTo(bd);
       final c = b.createdAt.compareTo(a.createdAt);
       if (c != 0) return c;
       return b.id!.compareTo(a.id!);

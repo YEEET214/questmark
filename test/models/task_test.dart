@@ -87,6 +87,56 @@ void main() {
     });
   });
 
+  group('Task.completedAt', () {
+    test('kept for done tasks, normalised to UTC milliseconds', () {
+      final local = DateTime(2026, 11, 14, 12, 0, 0, 5, 7);
+      final t = Task(
+          title: 'x', createdAt: created, isDone: true, completedAt: local);
+      expect(t.completedAt!.isUtc, isTrue);
+      expect(t.completedAt!.microsecond, 0);
+    });
+
+    test('dropped for open tasks', () {
+      final t = Task(
+          title: 'x', createdAt: created, completedAt: DateTime.utc(2026));
+      expect(t.completedAt, isNull);
+    });
+
+    test('reopening with copyWith clears it', () {
+      final done = Task(
+          title: 'x',
+          createdAt: created,
+          isDone: true,
+          completedAt: DateTime.utc(2026));
+      expect(done.copyWith(isDone: false).completedAt, isNull);
+    });
+
+    test('done without a completion date is allowed (pre-v2 tasks)', () {
+      final t = Task(title: 'x', createdAt: created, isDone: true);
+      expect(t.isDone, isTrue);
+      expect(t.completedAt, isNull);
+    });
+
+    test('round trips through toMap/fromMap', () {
+      final t = Task(
+          id: 1,
+          title: 'x',
+          createdAt: created,
+          isDone: true,
+          completedAt: DateTime.utc(2026, 11, 20, 8));
+      expect(t.toMap()[Task.colCompletedAt],
+          DateTime.utc(2026, 11, 20, 8).millisecondsSinceEpoch);
+      expect(Task.fromMap(t.toMap()), t);
+    });
+
+    test('is part of equality', () {
+      Task done(DateTime at) => Task(
+          id: 1, title: 'x', createdAt: created, isDone: true, completedAt: at);
+      expect(done(DateTime.utc(2026, 1, 1)),
+          isNot(done(DateTime.utc(2026, 1, 2))));
+    });
+  });
+
   group('Task.isOverdue', () {
     final now = DateTime(2026, 11, 14, 10); // local time
 

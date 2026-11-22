@@ -51,6 +51,30 @@ void main() {
     });
   });
 
+  group('completedAt (schema v2)', () {
+    test('is stored and read back for a completed task', () async {
+      final saved = await repo.insert(Task(
+        title: 'done',
+        createdAt: DateTime.utc(2026, 1, 1),
+        isDone: true,
+        completedAt: DateTime.utc(2026, 1, 3, 12),
+      ));
+      expect((await repo.getById(saved.id!))!.completedAt,
+          DateTime.utc(2026, 1, 3, 12));
+    });
+
+    test('reopening clears it in the database', () async {
+      final saved = await repo.insert(Task(
+        title: 'done',
+        createdAt: DateTime.utc(2026, 1, 1),
+        isDone: true,
+        completedAt: DateTime.utc(2026, 1, 3),
+      ));
+      await repo.update(saved.copyWith(isDone: false));
+      expect((await repo.getById(saved.id!))!.completedAt, isNull);
+    });
+  });
+
   group('getById', () {
     test('returns null for an unknown id', () async {
       expect(await repo.getById(999), isNull);
@@ -105,23 +129,23 @@ void main() {
       expect(await repo.getAll(), isEmpty);
     });
 
-    test('active before done, due-dated first (earliest first), then newest',
+    test('newest created first, ties by newest id; done state is ignored',
         () async {
-      await repo.insert(newTask('done, due soon',
-          done: true, due: DateTime.utc(2026, 1, 2)));
+      // Completing a task must never move it (PLAN.md D16), so the
+      // repository's order doesn't depend on is_done or due dates. The
+      // list page applies the user's chosen sort on top.
+      await repo.insert(newTask('old', created: DateTime.utc(2026, 1, 1)));
+      await repo.insert(newTask('newest, done',
+          created: DateTime.utc(2026, 1, 9), done: true));
+      await repo.insert(newTask('middle', created: DateTime.utc(2026, 1, 5)));
       await repo.insert(
-          newTask('old, no due', created: DateTime.utc(2026, 1, 1)));
-      await repo.insert(
-          newTask('new, no due', created: DateTime.utc(2026, 1, 5)));
-      await repo.insert(newTask('due later', due: DateTime.utc(2026, 3)));
-      await repo.insert(newTask('due sooner', due: DateTime.utc(2026, 2)));
+          newTask('old, inserted later', created: DateTime.utc(2026, 1, 1)));
 
       expect((await repo.getAll()).map((t) => t.title), [
-        'due sooner',
-        'due later',
-        'new, no due',
-        'old, no due',
-        'done, due soon',
+        'newest, done',
+        'middle',
+        'old, inserted later',
+        'old',
       ]);
     });
   });
@@ -135,7 +159,8 @@ void main() {
       final locatedDone = await repo
           .insert(newTask('done on map', done: true, at: GeoPoint(3, 4)));
 
-      expect(await repo.getWithLocation(), [located, locatedDone]);
+      // Same created date, so the newer row (higher id) comes first.
+      expect(await repo.getWithLocation(), [locatedDone, located]);
     });
   });
 }

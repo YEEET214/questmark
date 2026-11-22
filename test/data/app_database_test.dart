@@ -105,6 +105,30 @@ void main() {
       expect(rows.single['priority'], 0);
     });
 
+    test('the real v1 -> v2 upgrade adds completed_at and keeps tasks',
+        () async {
+      // Build a genuine version-1 database (only the first migration).
+      final v1 = await AppDatabase.open(
+          factory: databaseFactoryFfi,
+          path: path,
+          schema: AppDatabase.migrations.sublist(0, 1));
+      await v1.insert('tasks', {...validRow(), 'title': 'old done', 'is_done': 1});
+      expect(await v1.getVersion(), 1);
+      await v1.close();
+
+      final current =
+          await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+      addTearDown(current.close);
+
+      expect(await current.getVersion(), greaterThanOrEqualTo(2));
+      final row = (await current.query('tasks')).single;
+      expect(row['title'], 'old done');
+      expect(row['is_done'], 1);
+      expect(row.containsKey('completed_at'), isTrue);
+      expect(row['completed_at'], isNull,
+          reason: 'tasks completed before v2 have an unknown completion date');
+    });
+
     test('a failing migration rolls back and leaves the old data intact',
         () async {
       await createV1WithOneTask();

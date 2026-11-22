@@ -92,9 +92,14 @@ class TaskListController extends ChangeNotifier {
     await _refresh();
   }
 
+  /// Ticks or unticks [task]. Ticking records the completion time (from
+  /// the clock); unticking clears it.
   Future<void> setDone(Task task, bool done) async {
     if (task.isDone == done) return;
-    await save(task.copyWith(isDone: done));
+    await save(task.copyWith(
+      isDone: done,
+      completedAt: () => done ? _clock() : null,
+    ));
   }
 
   /// Deletes [task]. Returns it so the caller can offer "Undo" via

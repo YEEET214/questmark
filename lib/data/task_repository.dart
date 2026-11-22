@@ -15,10 +15,10 @@ class TaskNotFoundException implements Exception {
 /// This is an interface, so the state layer and widget tests can use an
 /// in-memory fake. The real implementation is [SqfliteTaskRepository].
 ///
-/// List ordering (used by [getAll] and [getWithLocation]):
-/// 1. active tasks before completed ones;
-/// 2. tasks with a due date first, earliest due first;
-/// 3. then newest created first.
+/// Ordering (used by [getAll] and [getWithLocation]): newest created
+/// first. This is only a stable default. The list page sorts with the
+/// user's chosen sort (TaskQuery, PLAN.md D16), so completing a task never
+/// moves it.
 abstract interface class TaskRepository {
   Future<List<Task>> getAll();
 
@@ -48,11 +48,7 @@ class SqfliteTaskRepository implements TaskRepository {
 
   static const _table = 'tasks';
 
-  static const _orderBy = '${Task.colIsDone} ASC, '
-      '${Task.colDueAt} IS NULL ASC, '
-      '${Task.colDueAt} ASC, '
-      '${Task.colCreatedAt} DESC, '
-      '${Task.colId} DESC';
+  static const _orderBy = '${Task.colCreatedAt} DESC, ${Task.colId} DESC';
 
   @override
   Future<List<Task>> getAll() => _query();

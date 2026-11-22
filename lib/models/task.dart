@@ -15,6 +15,8 @@ class Task {
   /// * Times are normalised to UTC with millisecond precision, matching
   ///   what SQLite stores (see [toMap]). A task therefore equals itself
   ///   after a database round trip.
+  /// * [completedAt] is dropped when the task isn't done, so an open task
+  ///   can never carry a completion date.
   Task({
     this.id,
     required String title,
@@ -22,13 +24,17 @@ class Task {
     this.isDone = false,
     required DateTime createdAt,
     DateTime? dueAt,
+    DateTime? completedAt,
     String? address,
     this.location,
   })  : title = title.trim(),
         description = _blankToNull(description),
         address = _blankToNull(address),
         createdAt = _normalise(createdAt),
-        dueAt = dueAt == null ? null : _normalise(dueAt) {
+        dueAt = dueAt == null ? null : _normalise(dueAt),
+        completedAt = (!isDone || completedAt == null)
+            ? null
+            : _normalise(completedAt) {
     if (this.title.isEmpty) {
       throw ArgumentError.value(title, 'title', 'must not be empty');
     }
@@ -41,6 +47,10 @@ class Task {
   final bool isDone;
   final DateTime createdAt;
   final DateTime? dueAt;
+
+  /// When the task was ticked. `null` while open, and also for tasks
+  /// completed before this was recorded (schema v1): unknown.
+  final DateTime? completedAt;
 
   /// Human-readable address. Shown in the UI and kept so we never have to
   /// geocode the same task twice.
@@ -78,6 +88,7 @@ class Task {
     bool? isDone,
     DateTime? createdAt,
     ValueGetter<DateTime?>? dueAt,
+    ValueGetter<DateTime?>? completedAt,
     ValueGetter<String?>? address,
     ValueGetter<GeoPoint?>? location,
   }) {
@@ -88,6 +99,7 @@ class Task {
       isDone: isDone ?? this.isDone,
       createdAt: createdAt ?? this.createdAt,
       dueAt: dueAt != null ? dueAt() : this.dueAt,
+      completedAt: completedAt != null ? completedAt() : this.completedAt,
       address: address != null ? address() : this.address,
       location: location != null ? location() : this.location,
     );
@@ -102,6 +114,7 @@ class Task {
         isDone: isDone,
         createdAt: createdAt,
         dueAt: dueAt,
+        completedAt: completedAt,
         address: address,
         location: location,
       );
@@ -113,6 +126,7 @@ class Task {
   static const colIsDone = 'is_done';
   static const colCreatedAt = 'created_at';
   static const colDueAt = 'due_at';
+  static const colCompletedAt = 'completed_at'; // schema v2
   static const colAddress = 'address';
   static const colLatitude = 'latitude';
   static const colLongitude = 'longitude';
@@ -127,6 +141,7 @@ class Task {
         colIsDone: isDone ? 1 : 0,
         colCreatedAt: createdAt.millisecondsSinceEpoch,
         colDueAt: dueAt?.millisecondsSinceEpoch,
+        colCompletedAt: completedAt?.millisecondsSinceEpoch,
         colAddress: address,
         colLatitude: location?.latitude,
         colLongitude: location?.longitude,
@@ -146,6 +161,7 @@ class Task {
           'Task ${map[colId]} has only one of latitude/longitude set');
     }
     final dueMs = map[colDueAt] as int?;
+    final completedMs = map[colCompletedAt] as int?;
     return Task(
       id: map[colId] as int?,
       title: map[colTitle] as String,
@@ -157,6 +173,9 @@ class Task {
       dueAt: dueMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(dueMs, isUtc: true),
+      completedAt: completedMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(completedMs, isUtc: true),
       address: map[colAddress] as String?,
       location: lat == null ? null : GeoPoint(lat, lng!),
     );
@@ -171,12 +190,13 @@ class Task {
       other.isDone == isDone &&
       other.createdAt == createdAt &&
       other.dueAt == dueAt &&
+      other.completedAt == completedAt &&
       other.address == address &&
       other.location == location;
 
   @override
   int get hashCode => Object.hash(id, title, description, isDone, createdAt,
-      dueAt, address, location);
+      dueAt, completedAt, address, location);
 
   @override
   String toString() =>

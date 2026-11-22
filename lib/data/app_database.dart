@@ -52,6 +52,11 @@ class AppDatabase {
       'CREATE INDEX idx_tasks_done_created '
           'ON tasks (${Task.colIsDone}, ${Task.colCreatedAt})',
     ],
+    // v2 (Phase 4b): when a task was completed, for the "date completed"
+    // filter and sort. Existing completed tasks get NULL ("unknown").
+    [
+      'ALTER TABLE tasks ADD COLUMN ${Task.colCompletedAt} INTEGER',
+    ],
   ];
 
   /// Opens (creating or upgrading as needed) the database.

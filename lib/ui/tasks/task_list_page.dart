@@ -36,6 +36,7 @@ class _TaskListPageState extends State<TaskListPage> {
   late final NavigationController _nav;
   late final TaskListViewController _view;
   final _search = TextEditingController();
+  final _searchFocus = FocusNode();
 
   @override
   void initState() {
@@ -43,12 +44,16 @@ class _TaskListPageState extends State<TaskListPage> {
     _view = context.read<TaskListViewController>();
     _search.text = _view.query.search;
     _nav = context.read<NavigationController>()..addListener(_onTabChanged);
+    // Rebuild when the search field gains or loses focus (keyboard open or
+    // closed), to hide or show the "New quest" button.
+    _searchFocus.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _nav.removeListener(_onTabChanged);
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -58,6 +63,8 @@ class _TaskListPageState extends State<TaskListPage> {
   }
 
   void _setQuery(TaskQuery q) => _view.setQuery(q);
+
+  void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 
   @override
   Widget build(BuildContext context) {
@@ -73,15 +80,21 @@ class _TaskListPageState extends State<TaskListPage> {
         title: const Text('Quests'),
         actions: [
           if (showControls) ...[
-            _SortButton(query: query, onChanged: _setQuery),
+            _SortButton(
+              query: query,
+              onChanged: _setQuery,
+              onOpened: _dismissKeyboard,
+            ),
             IconButton(
               tooltip: 'Filter by date',
               icon: Badge(
                 isLabelVisible: query.hasDateFilters,
                 smallSize: 8,
-                child: const Icon(Icons.filter_list),
+                // A funnel, so it doesn't look like the sort icon's lines.
+                child: const Icon(Icons.filter_alt_outlined),
               ),
               onPressed: () async {
+                _dismissKeyboard();
                 final edited = await TaskFilterSheet.show(context, query);
                 if (edited != null) _setQuery(edited);
               },
@@ -91,13 +104,22 @@ class _TaskListPageState extends State<TaskListPage> {
           const DevToolsButton(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => openTaskEditor(context, null),
-        icon: const Icon(Icons.add),
-        label: const Text('New quest'),
-      ),
+      // Hidden while typing a search (the keyboard is open then), so it
+      // doesn't float over the results. Keyed on the search field's focus,
+      // not on the keyboard size: the app shell's Scaffold already absorbs
+      // the keyboard, so this page never sees it.
+      floatingActionButton: _searchFocus.hasFocus
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => openTaskEditor(context, null),
+              icon: const Icon(Icons.add),
+              label: const Text('New quest'),
+            ),
       body: showControls
           ? Column(
+              // Chip rows start at the left edge even when they're
+              // narrower than the screen.
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildSearchField(query),
                 _StatusChips(
@@ -119,6 +141,7 @@ class _TaskListPageState extends State<TaskListPage> {
       child: TextField(
         key: const Key('searchField'),
         controller: _search,
+        focusNode: _searchFocus,
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: 'Search quests',
@@ -141,6 +164,10 @@ class _TaskListPageState extends State<TaskListPage> {
         // The search runs on the phone's own list, so filtering on every
         // keystroke is cheap (no network involved).
         onChanged: (text) => _setQuery(query.copyWith(search: text)),
+        // Tapping anywhere else closes the keyboard. Without this, the
+        // field keeps focus and the keyboard pops back up whenever a sheet
+        // or menu closes.
+        onTapOutside: (_) => _dismissKeyboard(),
       ),
     );
   }
@@ -279,6 +306,7 @@ class _DateFilterChips extends StatelessWidget {
                   avatar: const Icon(Icons.event, size: 18),
                   label: Text(describeRange(field, field.of(query))),
                   onPressed: () async {
+                    FocusManager.instance.primaryFocus?.unfocus();
                     final edited = await TaskFilterSheet.show(context, query);
                     if (edited != null) onChanged(edited);
                   },
@@ -295,10 +323,15 @@ class _DateFilterChips extends StatelessWidget {
 
 /// Sort menu: pick the field, then ascending or descending.
 class _SortButton extends StatelessWidget {
-  const _SortButton({required this.query, required this.onChanged});
+  const _SortButton({
+    required this.query,
+    required this.onChanged,
+    required this.onOpened,
+  });
 
   final TaskQuery query;
   final ValueChanged<TaskQuery> onChanged;
+  final VoidCallback onOpened;
 
   @override
   Widget build(BuildContext context) {
@@ -306,6 +339,7 @@ class _SortButton extends StatelessWidget {
     return PopupMenuButton<Object>(
       tooltip: 'Sort: ${query.sortField.label}, $direction',
       icon: const Icon(Icons.sort),
+      onOpened: onOpened,
       onSelected: (choice) => onChanged(switch (choice) {
         SortField f => query.copyWith(sortField: f),
         bool asc => query.copyWith(ascending: asc),

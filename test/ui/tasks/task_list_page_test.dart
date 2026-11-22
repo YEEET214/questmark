@@ -474,4 +474,73 @@ void main() {
       expect(find.byTooltip('Show on map'), findsOneWidget);
     });
   });
+
+  group('emulator review fixes', () {
+    testWidgets('filter (funnel) and sort icons are different',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'a')]);
+      expect(find.byIcon(Icons.sort), findsOneWidget);
+      expect(find.byIcon(Icons.filter_alt_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.filter_list), findsNothing);
+    });
+
+    testWidgets('"New quest" is hidden while typing a search',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'a')]);
+      expect(find.text('New quest'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('searchField')));
+      await tester.pumpAndSettle();
+      expect(find.text('New quest'), findsNothing);
+
+      await tester.tapAt(const Offset(400, 590)); // outside: keyboard closes
+      await tester.pumpAndSettle();
+      expect(find.text('New quest'), findsOneWidget);
+    });
+
+    testWidgets('tapping outside the search field removes its focus',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'a')]);
+      await tester.tap(find.byKey(const Key('searchField')));
+      await tester.pumpAndSettle();
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.focusNode.hasFocus, isTrue);
+
+      await tester.tapAt(const Offset(400, 590)); // empty list area
+      await tester.pumpAndSettle();
+      expect(field.focusNode.hasFocus, isFalse);
+    });
+
+    testWidgets('date filter chip is left-aligned under the status chips',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'a', due: DateTime(2026, 11, 1))]);
+      view.setQuery(view.query.copyWith(due: DayRange(to: DateTime(2026, 12))));
+      await tester.pumpAndSettle();
+      final chip = tester.getRect(find.byKey(const Key('dateChip-due')));
+      final allChip = tester.getRect(find.byKey(const Key('status-all')));
+      // Both rows start at the 16 px page margin, even on a wide screen
+      // where they don't fill the width.
+      expect(allChip.left, closeTo(16, 1));
+      expect(chip.left, closeTo(16, 1));
+    });
+
+    testWidgets('a chosen date fits on one line in the sheet button',
+        (tester) async {
+      tester.view.physicalSize = const Size(720, 1280);
+      tester.view.devicePixelRatio = 2; // a 360-wide phone, like the emulator
+      addTearDown(tester.view.reset);
+      await pumpList(tester, [seed(1, 'a')]);
+      view.setQuery(view.query.copyWith(due: DayRange(to: DateTime(2026, 11, 22))));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Filter by date'));
+      await tester.pumpAndSettle();
+      final button = find.byKey(const Key('due-to'));
+      final text = find.descendant(
+          of: button, matching: find.text('To 22-11-2026'));
+      expect(text, findsOneWidget);
+      // One line: the text is no taller than a single line of the button.
+      expect(tester.getSize(text).height, lessThan(30));
+    });
+  });
 }

@@ -142,8 +142,19 @@ class _TaskFilterSheetState extends State<TaskFilterSheet> {
         Expanded(
           child: OutlinedButton(
             key: Key(key),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
             onPressed: () => _pick(field, isFrom: isFrom),
-            child: Text(day == null ? label : '$label ${formatDate(day)}'),
+            // Shrinks the text instead of wrapping it onto several lines
+            // on narrow phones.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                day == null ? label : '$label ${formatDate(day)}',
+                maxLines: 1,
+              ),
+            ),
           ),
         ),
         if (day != null)

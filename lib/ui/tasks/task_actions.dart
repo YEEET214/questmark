@@ -6,6 +6,7 @@ import '../../state/map_focus_controller.dart';
 import '../../state/navigation_controller.dart';
 import '../../state/task_list_controller.dart';
 import '../common/confirm_dialog.dart';
+import '../common/undo_snack_bar.dart';
 import 'recycle_bin_page.dart';
 import 'task_editor_page.dart';
 
@@ -51,12 +52,9 @@ Future<bool> deleteTaskWithUndo(BuildContext context, Task task) async {
     final deleted = await controller.moveToBin(task);
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text('Moved "${deleted.title}" to the recycle bin'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => controller.restoreFromBin(deleted),
-        ),
+      ..showSnackBar(undoSnackBar(
+        message: 'Moved "${deleted.title}" to the recycle bin',
+        onUndo: () => controller.restoreFromBin(deleted),
       ));
   });
 }

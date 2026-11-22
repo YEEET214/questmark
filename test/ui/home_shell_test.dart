@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/app.dart';
+import 'package:questmark/models/task.dart';
 import 'package:questmark/state/navigation_controller.dart';
 
 import '../helpers/fake_task_repository.dart';
@@ -87,6 +88,62 @@ void main() {
       // skipOffstage: false also finds the hidden page. It must still be
       // in the tree, so its state (e.g. the map camera) survives.
       expect(find.text('No quests yet', skipOffstage: false), findsOneWidget);
+    });
+  });
+
+  group('snackbars and the "New quest" button (full app)', () {
+    // In the real app the Quests page is nested inside the shell's
+    // Scaffold. Snackbars used to go to that outer Scaffold and cover the
+    // button; this checks the fix in the real nesting.
+    Future<void> pumpWithTasks(WidgetTester tester) async {
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: FakeTaskRepository([
+          Task(id: 1, title: 'swipe me', createdAt: DateTime.utc(2026, 1, 2)),
+          Task(id: 2, title: 'other', createdAt: DateTime.utc(2026, 1, 1)),
+        ]),
+        mapBaseLayer: const SizedBox.shrink(),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    double fabBottom(WidgetTester tester) =>
+        tester.getRect(find.byType(FloatingActionButton)).bottom;
+
+    testWidgets('the button moves up above the snackbar, and back down when '
+        'it disappears after 4 seconds', (tester) async {
+      await pumpWithTasks(tester);
+      final resting = fabBottom(tester);
+
+      await tester.drag(find.text('swipe me'), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+
+      final snack = find.byType(SnackBar);
+      expect(snack, findsOneWidget);
+      expect(fabBottom(tester), lessThan(resting), reason: 'moved up');
+      expect(fabBottom(tester),
+          lessThanOrEqualTo(tester.getRect(snack).top + 0.5),
+          reason: 'not covered by the snackbar');
+
+      await tester.pump(const Duration(seconds: 4, milliseconds: 100));
+      await tester.pumpAndSettle();
+      expect(snack, findsNothing);
+      expect(fabBottom(tester), closeTo(resting, 0.5), reason: 'back down');
+    });
+
+    testWidgets('the "Completed" Undo snackbar also lifts the button',
+        (tester) async {
+      await pumpWithTasks(tester);
+      final resting = fabBottom(tester);
+
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Completed "'), findsOneWidget);
+      expect(fabBottom(tester), lessThan(resting));
+
+      await tester.pump(const Duration(seconds: 4, milliseconds: 100));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+      expect(fabBottom(tester), closeTo(resting, 0.5));
     });
   });
 }

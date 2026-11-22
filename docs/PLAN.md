@@ -693,6 +693,25 @@ chosen in this order:
   so map tests place quests close together. Its single-tap callback fires
   only after the double-tap window, so tests advance time after a tap.
 
+### D21. Undo snackbars: 4 seconds, and never covering "New quest"
+*User request during the PR #8 review.*
+* **Every snackbar with "Undo" disappears after 4 seconds.** Flutter keeps
+  a snackbar that has an action button on screen until it's tapped
+  (`SnackBar.persist` defaults to true when there's an action), so they
+  appeared to stay forever. All Undo snackbars now come from one helper
+  (`undoSnackBar`, `persist: false`, 4 s), so they behave the same
+  everywhere.
+* **The "New quest" button moves up above a snackbar, and back down when
+  it's gone.** Flutter does this automatically, but only for a snackbar in
+  the *same* Scaffold. Flutter shows snackbars only in the outermost
+  Scaffold, which is the app shell's, while the button lives in the
+  Quests page's own Scaffold. The Quests page therefore has its own
+  `ScaffoldMessenger`, so its snackbars appear inside the page. Actions
+  that show snackbars use a context *below* that messenger (the tile's
+  context), not the page State's own context, which sits above it.
+* A full-app widget test covers the real nesting. It was confirmed to
+  fail without the fix.
+
 ---
 
 ## 4. Phases

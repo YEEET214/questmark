@@ -54,6 +54,19 @@ void main() {
       expect(controller.tasks.map((t) => t.title), ['My real quest']);
     });
 
+    test('removeAll also permanently deletes demo quests in the bin',
+        () async {
+      await DemoQuests.add(controller, clock: () => now);
+      final demo = controller.tasks
+          .firstWhere((t) => t.title.startsWith(DemoQuests.titlePrefix));
+      await controller.moveToBin(demo);
+
+      await DemoQuests.removeAll(controller);
+      expect(controller.binTasks, isEmpty);
+      expect(await repo.getById(demo.id!), isNull);
+      expect(controller.tasks.map((t) => t.title), ['My real quest']);
+    });
+
     test('removeAll with no demo quests does nothing', () async {
       expect(await DemoQuests.removeAll(controller), 0);
       expect(controller.tasks, hasLength(1));

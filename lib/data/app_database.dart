@@ -57,6 +57,13 @@ class AppDatabase {
     [
       'ALTER TABLE tasks ADD COLUMN ${Task.colCompletedAt} INTEGER',
     ],
+    // v3 (Phase 4c): recycle bin. A non-NULL deleted_at means "in the bin
+    // since then" (PLAN.md D18). The index keeps the normal "not deleted"
+    // queries and the 30-day purge cheap.
+    [
+      'ALTER TABLE tasks ADD COLUMN ${Task.colDeletedAt} INTEGER',
+      'CREATE INDEX idx_tasks_deleted ON tasks (${Task.colDeletedAt})',
+    ],
   ];
 
   /// Opens (creating or upgrading as needed) the database.

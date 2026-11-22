@@ -121,6 +121,8 @@ void main() {
       await tester.tap(find.byTooltip('Delete'));
       await tester.pumpAndSettle();
       expect(find.text('Delete quest?'), findsOneWidget);
+      expect(find.textContaining('will be moved to the recycle bin'),
+          findsOneWidget);
 
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();

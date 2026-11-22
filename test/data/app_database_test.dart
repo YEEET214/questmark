@@ -129,6 +129,29 @@ void main() {
           reason: 'tasks completed before v2 have an unknown completion date');
     });
 
+    test('the real v2 -> v3 upgrade adds deleted_at; nothing is in the bin',
+        () async {
+      final v2 = await AppDatabase.open(
+          factory: databaseFactoryFfi,
+          path: path,
+          schema: AppDatabase.migrations.sublist(0, 2));
+      await v2.insert('tasks', {...validRow(), 'title': 'kept'});
+      expect(await v2.getVersion(), 2);
+      await v2.close();
+
+      final current =
+          await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+      addTearDown(current.close);
+
+      expect(await current.getVersion(), greaterThanOrEqualTo(3));
+      final row = (await current.query('tasks')).single;
+      expect(row['title'], 'kept');
+      expect(row['deleted_at'], isNull, reason: 'existing tasks are not binned');
+      final names = (await current.query('sqlite_master', columns: ['name']))
+          .map((r) => r['name']);
+      expect(names, contains('idx_tasks_deleted'));
+    });
+
     test('a failing migration rolls back and leaves the old data intact',
         () async {
       await createV1WithOneTask();

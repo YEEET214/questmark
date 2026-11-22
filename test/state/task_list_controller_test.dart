@@ -27,6 +27,41 @@ void main() {
     controller.addListener(() => notifications++);
   }
 
+  group('recycle bin purge (30 days)', () {
+    Task binned(int id, DateTime deletedAt) => Task(
+          id: id,
+          title: 'binned $id',
+          createdAt: DateTime.utc(2026, 1, 1),
+          deletedAt: deletedAt,
+        );
+
+    test('load removes tasks deleted more than 30 days ago', () async {
+      build([
+        binned(1, now.subtract(const Duration(days: 31))),
+        binned(2, now.subtract(const Duration(days: 29))),
+        seed(3, 'live'),
+      ]);
+      await controller.load();
+
+      expect(controller.binTasks.map((t) => t.id), [2]);
+      expect(await repo.getById(1), isNull);
+      expect(controller.tasks.map((t) => t.id), [3]);
+    });
+
+    test('purgeExpiredBin (bin opened) removes expired tasks and refreshes',
+        () async {
+      var clockNow = now;
+      repo = FakeTaskRepository([binned(1, now)]);
+      controller = TaskListController(repo, clock: () => clockNow);
+      await controller.load();
+      expect(controller.binTasks, hasLength(1));
+
+      clockNow = now.add(const Duration(days: 30, minutes: 1));
+      expect(await controller.purgeExpiredBin(), 1);
+      expect(controller.binTasks, isEmpty);
+    });
+  });
+
   group('load', () {
     test('starts empty and not loaded', () {
       build();
@@ -140,21 +175,54 @@ void main() {
       expect(notifications, 0);
     });
 
-    test('delete removes the task and returns it', () async {
+    test('moveToBin moves the task to the bin, stamped with the clock',
+        () async {
       final t = controller.tasks.single;
-      final deleted = await controller.delete(t);
+      final deleted = await controller.moveToBin(t);
       expect(deleted, t);
+      expect(controller.tasks, isEmpty);
+      expect(controller.binTasks.single.id, t.id);
+      expect(controller.binTasks.single.deletedAt, now);
+    });
+
+    test('restoreFromBin brings it back unchanged, with the same id',
+        () async {
+      final t = controller.tasks.single;
+      await controller.moveToBin(t);
+      await controller.restoreFromBin(controller.binTasks.single);
+
+      expect(controller.tasks, [t]);
+      expect(controller.binTasks, isEmpty);
+    });
+
+    test('moveCompletedToBin moves only completed tasks and counts them',
+        () async {
+      await controller.add(title: 'done 1');
+      await controller.setDone(
+          controller.tasks.firstWhere((t) => t.title == 'done 1'), true);
+
+      expect(await controller.moveCompletedToBin(), 1);
+      expect(controller.tasks.map((t) => t.title), ['existing']);
+      expect(controller.binTasks.map((t) => t.title), ['done 1']);
+    });
+
+    test('deletePermanently and emptyBin remove tasks for good', () async {
+      await controller.add(title: 'b');
+      await controller.moveToBin(controller.tasks.first);
+      await controller.moveToBin(controller.tasks.first);
+      expect(controller.binTasks, hasLength(2));
+
+      await controller.deletePermanently(controller.binTasks.first);
+      expect(controller.binTasks, hasLength(1));
+      expect(await controller.emptyBin(), 1);
+      expect(controller.binTasks, isEmpty);
       expect(controller.tasks, isEmpty);
     });
 
-    test('restore puts a deleted task back with the same content', () async {
-      final t = controller.tasks.single;
-      final deleted = await controller.delete(t);
-      final restored = await controller.restore(deleted);
-
-      expect(controller.tasks, [restored]);
-      // New row, so new id; everything else is identical.
-      expect(restored.withoutId(), t.withoutId());
+    test('expiresAt is 30 days after deletion', () async {
+      await controller.moveToBin(controller.tasks.single);
+      expect(controller.expiresAt(controller.binTasks.single),
+          now.add(const Duration(days: 30)));
     });
 
     test('write failures are rethrown and the list stays unchanged',

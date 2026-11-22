@@ -565,8 +565,9 @@ rejected: the task would still jump away.)
 * The "tasks without locations" badge is unaffected: it still counts all
   tasks without a location.
 
-### D18. Recycle bin and "Delete all completed tasks" (Phase 4c, planned)
-*User decision during the PR #4 review.*
+### D18. Recycle bin and "Delete all completed tasks" (Phase 4c)
+*User decision during the PR #4 review. Built in Phase 4c; see "As built"
+at the end of this section.*
 * **Deleting no longer destroys a task.** It moves the task to the
   **recycle bin**, where it stays for **30 days**. In the bin the user can
   **restore** it (it returns exactly as it was, with the same id) or
@@ -593,6 +594,46 @@ rejected: the task would still jump away.)
 * **Ordering with 4b:** 4b adds schema v2 (`completed_at`); 4c adds v3
   (`deleted_at`). They are separate migrations appended in order (the
   append-only rule in D3).
+
+**As built (Phase 4c):**
+* **Schema v3:** `deleted_at INTEGER` plus an index on it, so the "not
+  deleted" filter on every list query and the purge stay cheap.
+* **Repository:** `delete` is gone, so no caller can destroy a task by
+  accident. In its place there are explicit operations: `moveToBin`,
+  `moveCompletedToBin` (one SQL `UPDATE`, so all-or-nothing),
+  `restoreFromBin`, `deletePermanently`, `emptyBin` and `purgeBin`.
+  * `getAll`/`getWithLocation` skip binned tasks; `getBin` lists them,
+    most recently deleted first.
+  * `getById` still finds binned tasks.
+  * Moving an already-binned task keeps its original deletion time.
+* **`TaskListController`:** keeps `binTasks` next to `tasks`. `load()`
+  purges anything binned more than 30 days ago (`binRetention`), which is
+  the "on app start" purge. The bin page calls `purgeExpiredBin()` when
+  opened.
+* **Undo** after swipe or editor delete reads "Moved "x" to the recycle
+  bin", and simply restores the task with the same id. Phase 2's
+  re-insert with a new id is gone.
+* **Quests page "⋮" menu** (always shown, even with no quests, so the bin
+  is always reachable):
+  * **"Delete all completed tasks"** is disabled when there are none. Its
+    dialog: title "Delete all completed tasks?", message **"Are you sure?
+    This will move all completed tasks to the recycle bin."**, buttons
+    **No** / **Yes**. Afterwards: "Moved N completed tasks to the
+    recycle bin".
+  * **"Recycle bin"** opens the bin page.
+* **Recycle bin page:** each quest shows "Deleted dd-mm-yyyy · N days
+  left" (rounded up, so less than a day reads "1 day left"), with
+  **Restore** and **Delete permanently** buttons. Deleting permanently
+  asks first ("This can't be undone"). An empty bin explains the 30-day
+  rule.
+* **Added beyond the request:** an **"Empty recycle bin"** button (with
+  confirmation). It's the usual counterpart to a bin, and it's disabled
+  when the bin is empty.
+* The editor's delete dialog now says the quest "will be moved to the
+  recycle bin. You can restore it from there for 30 days."
+* The temporary dev tools' "Remove demo quests" deletes demo quests
+  permanently, including any in the bin, so test data doesn't fill the
+  bin.
 
 ### D19. Map starts centred on the user (Phase 5, planned)
 *User decision, after PR #4.* When the app starts, the map's camera is
@@ -652,6 +693,25 @@ chosen in this order:
   so map tests place quests close together. Its single-tap callback fires
   only after the double-tap window, so tests advance time after a tap.
 
+### D21. Undo snackbars: 4 seconds, and never covering "New quest"
+*User request during the PR #8 review.*
+* **Every snackbar with "Undo" disappears after 4 seconds.** Flutter keeps
+  a snackbar that has an action button on screen until it's tapped
+  (`SnackBar.persist` defaults to true when there's an action), so they
+  appeared to stay forever. All Undo snackbars now come from one helper
+  (`undoSnackBar`, `persist: false`, 4 s), so they behave the same
+  everywhere.
+* **The "New quest" button moves up above a snackbar, and back down when
+  it's gone.** Flutter does this automatically, but only for a snackbar in
+  the *same* Scaffold. Flutter shows snackbars only in the outermost
+  Scaffold, which is the app shell's, while the button lives in the
+  Quests page's own Scaffold. The Quests page therefore has its own
+  `ScaffoldMessenger`, so its snackbars appear inside the page. Actions
+  that show snackbars use a context *below* that messenger (the tile's
+  context), not the page State's own context, which sits above it.
+* A full-app widget test covers the real nesting. It was confirmed to
+  fail without the fix.
+
 ---
 
 ## 4. Phases
@@ -667,8 +727,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **2. Task list UI** | ✅ Done (PR #3) | `feature/02-task-list` | List page (active/completed), add/edit/delete, tick to complete, swipe to delete | widget tests for add/edit/complete/delete |
 | **3. Map + quest markers** | ✅ Done (PR #4) | `feature/03-map` | `flutter_map` + OpenFreeMap vector tiles with persistent cache and attribution; quest markers for located tasks; tap a marker → task details | marker state mapping, tile source config, marker rendering |
 | **4. Show on map** | ✅ Done (PR #6) | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
-| **4b. List search, filter & sort** | 🚧 In progress | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
-| **4c. Recycle bin** | ⬜ Planned | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
+| **4b. List search, filter & sort** | ✅ Done (PR #7) | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
+| **4c. Recycle bin** | 🚧 In progress | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ⬜ Planned | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |

@@ -10,6 +10,7 @@ import 'package:questmark/state/task_list_controller.dart';
 import 'package:questmark/state/task_list_view_controller.dart';
 import 'package:questmark/ui/tasks/task_editor_page.dart';
 import 'package:questmark/ui/tasks/task_filter_sheet.dart';
+import 'package:questmark/ui/tasks/recycle_bin_page.dart';
 import 'package:questmark/ui/tasks/task_list_page.dart';
 
 import '../../helpers/fake_task_repository.dart';
@@ -363,7 +364,8 @@ void main() {
       await tester.drag(find.text('swipe me'), const Offset(-600, 0));
       await tester.pumpAndSettle();
       expect(find.text('swipe me'), findsNothing);
-      expect(find.text('Deleted "swipe me"'), findsOneWidget);
+      expect(find.text('Moved "swipe me" to the recycle bin'),
+          findsOneWidget);
       expect((await repo.getAll()).map((t) => t.title), ['b']);
 
       await tester.tap(find.text('Undo'));
@@ -541,6 +543,96 @@ void main() {
       expect(text, findsOneWidget);
       // One line: the text is no taller than a single line of the button.
       expect(tester.getSize(text).height, lessThan(30));
+    });
+  });
+
+  group('menu: delete all completed / recycle bin (D18)', () {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the confirmation uses the exact wording, with Yes and No',
+        (tester) async {
+      await pumpList(tester, [seed(1, 'open'), seed(2, 'done', done: true)]);
+      await openMenu(tester);
+      await tester.tap(find.text('Delete all completed tasks'));
+      await tester.pumpAndSettle();
+
+      expect(
+          find.text('Are you sure? This will move all completed tasks to '
+              'the recycle bin.'),
+          findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'No'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Yes'), findsOneWidget);
+    });
+
+    testWidgets('"No" quits without changing anything', (tester) async {
+      final repo =
+          await pumpList(tester, [seed(1, 'open'), seed(2, 'done', done: true)]);
+      final writes = repo.writes;
+      await openMenu(tester);
+      await tester.tap(find.text('Delete all completed tasks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'No'));
+      await tester.pumpAndSettle();
+
+      expect(repo.writes, writes);
+      expect(find.text('done'), findsOneWidget);
+    });
+
+    testWidgets('"Yes" moves all completed tasks to the bin', (tester) async {
+      final repo = await pumpList(tester, [
+        seed(1, 'open'),
+        seed(2, 'done a', done: true),
+        seed(3, 'done b', done: true),
+      ]);
+      await openMenu(tester);
+      await tester.tap(find.text('Delete all completed tasks'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Yes'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Moved 2 completed tasks to the recycle bin'),
+          findsOneWidget);
+      expect(find.text('done a'), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+      expect((await repo.getBin()).map((t) => t.title).toSet(),
+          {'done a', 'done b'});
+    });
+
+    testWidgets('disabled when there are no completed tasks', (tester) async {
+      await pumpList(tester, [seed(1, 'open')]);
+      await openMenu(tester);
+      final item = tester.widget<PopupMenuItem<Object?>>(find.ancestor(
+          of: find.text('Delete all completed tasks'),
+          matching: find.byWidgetPredicate((w) => w is PopupMenuItem)));
+      expect(item.enabled, isFalse);
+    });
+
+    testWidgets('"Recycle bin" opens the bin page, even with no quests',
+        (tester) async {
+      await pumpList(tester);
+      await openMenu(tester);
+      await tester.tap(find.text('Recycle bin'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RecycleBinPage), findsOneWidget);
+    });
+
+    testWidgets('a swiped quest can be restored from the bin', (tester) async {
+      await pumpList(tester, [seed(1, 'swiped')]);
+      await tester.drag(find.text('swiped'), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('swiped'), findsNothing);
+
+      await openMenu(tester);
+      await tester.tap(find.text('Recycle bin'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Restore'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('swiped'), findsOneWidget);
     });
   });
 }

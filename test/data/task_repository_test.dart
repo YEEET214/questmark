@@ -105,22 +105,105 @@ void main() {
     });
   });
 
-  group('delete', () {
-    test('removes the task and reports true', () async {
-      final saved = await repo.insert(newTask('a'));
-      expect(await repo.delete(saved.id!), isTrue);
-      expect(await repo.getById(saved.id!), isNull);
+  group('recycle bin (schema v3)', () {
+    final binTime = DateTime.utc(2026, 11, 20, 12);
+
+    test('moveToBin hides the task from getAll and getWithLocation', () async {
+      final a = await repo.insert(newTask('a', at: GeoPoint(1, 2)));
+      final b = await repo.insert(newTask('b'));
+
+      expect(await repo.moveToBin(a.id!, binTime), isTrue);
+
+      expect(await repo.getAll(), [b]);
+      expect(await repo.getWithLocation(), isEmpty);
+      final inBin = (await repo.getBin()).single;
+      expect(inBin.id, a.id);
+      expect(inBin.deletedAt, binTime);
+      expect(inBin.withoutId().copyWith(deletedAt: () => null),
+          a.withoutId(), reason: 'nothing else changes');
     });
 
-    test('reports false for an unknown id', () async {
-      expect(await repo.delete(123), isFalse);
+    test('getById still finds a task in the bin', () async {
+      final a = await repo.insert(newTask('a'));
+      await repo.moveToBin(a.id!, binTime);
+      expect((await repo.getById(a.id!))!.isInBin, isTrue);
     });
 
-    test('leaves other tasks alone', () async {
+    test('moveToBin is false for unknown or already-binned tasks', () async {
+      final a = await repo.insert(newTask('a'));
+      expect(await repo.moveToBin(999, binTime), isFalse);
+      await repo.moveToBin(a.id!, binTime);
+      expect(await repo.moveToBin(a.id!, binTime.add(const Duration(days: 1))),
+          isFalse);
+      expect((await repo.getById(a.id!))!.deletedAt, binTime,
+          reason: 'the original deletion time is kept');
+    });
+
+    test('restoreFromBin brings it back with the same id', () async {
+      final a = await repo.insert(newTask('a'));
+      await repo.moveToBin(a.id!, binTime);
+
+      expect(await repo.restoreFromBin(a.id!), isTrue);
+      expect(await repo.getAll(), [a]);
+      expect(await repo.getBin(), isEmpty);
+      expect(await repo.restoreFromBin(a.id!), isFalse,
+          reason: 'not in the bin any more');
+    });
+
+    test('bin is ordered most recently deleted first', () async {
       final a = await repo.insert(newTask('a'));
       final b = await repo.insert(newTask('b'));
-      await repo.delete(a.id!);
+      await repo.moveToBin(b.id!, DateTime.utc(2026, 11, 1));
+      await repo.moveToBin(a.id!, DateTime.utc(2026, 11, 5));
+      expect((await repo.getBin()).map((t) => t.title), ['a', 'b']);
+    });
+
+    test('moveCompletedToBin moves only completed tasks and counts them',
+        () async {
+      await repo.insert(newTask('open'));
+      await repo.insert(newTask('done 1', done: true));
+      await repo.insert(newTask('done 2', done: true));
+
+      expect(await repo.moveCompletedToBin(binTime), 2);
+      expect((await repo.getAll()).map((t) => t.title), ['open']);
+      expect((await repo.getBin()).map((t) => t.title).toSet(),
+          {'done 1', 'done 2'});
+      expect(await repo.moveCompletedToBin(binTime), 0);
+    });
+
+    test('deletePermanently removes the row for good', () async {
+      final a = await repo.insert(newTask('a'));
+      final b = await repo.insert(newTask('b'));
+      expect(await repo.deletePermanently(a.id!), isTrue);
+      expect(await repo.getById(a.id!), isNull);
       expect(await repo.getAll(), [b]);
+      expect(await repo.deletePermanently(123), isFalse);
+    });
+
+    test('emptyBin removes only binned tasks', () async {
+      final a = await repo.insert(newTask('a'));
+      final b = await repo.insert(newTask('b'));
+      await repo.moveToBin(a.id!, binTime);
+      expect(await repo.emptyBin(), 1);
+      expect(await repo.getAll(), [b]);
+      expect(await repo.getBin(), isEmpty);
+    });
+
+    test('purgeBin removes only bin tasks deleted before the cutoff',
+        () async {
+      final old = await repo.insert(newTask('old'));
+      final recent = await repo.insert(newTask('recent'));
+      final live = await repo.insert(newTask('live'));
+      await repo.moveToBin(old.id!, DateTime.utc(2026, 10, 1));
+      await repo.moveToBin(recent.id!, DateTime.utc(2026, 11, 10));
+
+      final removed =
+          await repo.purgeBin(deletedBefore: DateTime.utc(2026, 10, 15));
+
+      expect(removed, 1);
+      expect(await repo.getById(old.id!), isNull);
+      expect((await repo.getBin()).single.id, recent.id);
+      expect(await repo.getAll(), [live]);
     });
   });
 

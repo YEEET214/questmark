@@ -7,6 +7,7 @@ import '../../models/task_query.dart';
 import '../../state/navigation_controller.dart';
 import '../../state/task_list_controller.dart';
 import '../../state/task_list_view_controller.dart';
+import '../common/undo_snack_bar.dart';
 import '../formatting.dart';
 import 'query_labels.dart';
 import 'task_actions.dart';
@@ -75,6 +76,23 @@ class _TaskListPageState extends State<TaskListPage> {
         controller.hasLoaded && controller.loadError == null &&
             controller.tasks.isNotEmpty;
 
+    // This page gets its own ScaffoldMessenger. Without it, snackbars go
+    // to the app shell's outer Scaffold (Flutter only shows them in the
+    // outermost one), where they covered the "New quest" button. Inside
+    // this page's own Scaffold, Flutter lifts the button above a snackbar
+    // and lowers it again when the snackbar is gone.
+    return ScaffoldMessenger(
+      child: _buildScaffold(context, controller, view, query, showControls),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    TaskListController controller,
+    TaskListViewController view,
+    TaskQuery query,
+    bool showControls,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Quests'),
@@ -100,6 +118,9 @@ class _TaskListPageState extends State<TaskListPage> {
               },
             ),
           ],
+          // Always available, even with no quests, so the recycle bin can
+          // always be reached.
+          _MoreMenu(hasCompleted: controller.completedTasks.isNotEmpty),
           // TEMPORARY: debug-only developer tools (removed before release).
           const DevToolsButton(),
         ],
@@ -222,7 +243,8 @@ class _TaskListPageState extends State<TaskListPage> {
           _TaskTile(
             task: t,
             now: now,
-            onToggleDone: (done) => _toggleDone(t, done),
+            onToggleDone: (tileContext, done) =>
+                _toggleDone(tileContext, t, done),
           ),
       ],
     );
@@ -230,26 +252,27 @@ class _TaskListPageState extends State<TaskListPage> {
 
   /// Ticks or unticks a task without moving it, and offers Undo after
   /// completing.
-  Future<void> _toggleDone(Task task, bool done) async {
+  /// [tileContext] is below this page's own ScaffoldMessenger, so the
+  /// snackbars appear in this page (and the "New quest" button moves out of
+  /// their way). The State's own context is above it.
+  Future<void> _toggleDone(
+      BuildContext tileContext, Task task, bool done) async {
     final id = task.id;
     if (id == null) return;
-    final controller = context.read<TaskListController>();
-    final messenger = ScaffoldMessenger.of(context);
+    final controller = tileContext.read<TaskListController>();
+    final messenger = ScaffoldMessenger.of(tileContext);
     _view.keepTaskVisible(id);
-    final ok = await setTaskDone(context, task, done);
+    final ok = await setTaskDone(tileContext, task, done);
     if (!ok || !done) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text('Completed "${task.title}"'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            final current =
-                controller.tasks.where((t) => t.id == id).firstOrNull;
-            if (current != null) controller.setDone(current, false);
-          },
-        ),
+      ..showSnackBar(undoSnackBar(
+        message: 'Completed "${task.title}"',
+        onUndo: () {
+          final current =
+              controller.tasks.where((t) => t.id == id).firstOrNull;
+          if (current != null) controller.setDone(current, false);
+        },
       ));
   }
 }
@@ -321,6 +344,47 @@ class _DateFilterChips extends StatelessWidget {
   }
 }
 
+enum _MoreAction { deleteCompleted, recycleBin }
+
+/// The "⋮" menu: "Delete all completed tasks" (disabled when there are
+/// none) and "Recycle bin" (PLAN.md D18).
+class _MoreMenu extends StatelessWidget {
+  const _MoreMenu({required this.hasCompleted});
+
+  final bool hasCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_MoreAction>(
+      tooltip: 'More options',
+      onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
+      onSelected: (action) => switch (action) {
+        _MoreAction.deleteCompleted => deleteAllCompleted(context),
+        _MoreAction.recycleBin => openRecycleBin(context),
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _MoreAction.deleteCompleted,
+          enabled: hasCompleted,
+          child: const ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.playlist_remove),
+            title: Text('Delete all completed tasks'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: _MoreAction.recycleBin,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.delete_outline),
+            title: Text('Recycle bin'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Sort menu: pick the field, then ascending or descending.
 class _SortButton extends StatelessWidget {
   const _SortButton({
@@ -377,7 +441,7 @@ class _TaskTile extends StatelessWidget {
 
   final Task task;
   final DateTime now;
-  final ValueChanged<bool> onToggleDone;
+  final void Function(BuildContext context, bool done) onToggleDone;
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +465,7 @@ class _TaskTile extends StatelessWidget {
       child: ListTile(
         leading: Checkbox(
           value: task.isDone,
-          onChanged: (done) => onToggleDone(done ?? false),
+          onChanged: (done) => onToggleDone(context, done ?? false),
         ),
         title: Text(
           task.title,

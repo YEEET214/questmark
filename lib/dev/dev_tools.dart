@@ -74,14 +74,15 @@ abstract final class DemoQuests {
     return all.length;
   }
 
-  /// Deletes every quest whose title starts with [titlePrefix]. Returns how
-  /// many were removed.
+  /// Permanently deletes every quest whose title starts with [titlePrefix],
+  /// including any in the recycle bin (demo data shouldn't fill the bin).
+  /// Returns how many were removed.
   static Future<int> removeAll(TaskListController controller) async {
-    final demo = controller.tasks
+    final demo = [...controller.tasks, ...controller.binTasks]
         .where((t) => t.title.startsWith(titlePrefix.trim()))
         .toList();
     for (final t in demo) {
-      await controller.delete(t);
+      await controller.deletePermanently(t);
     }
     return demo.length;
   }

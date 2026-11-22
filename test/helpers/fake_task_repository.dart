@@ -5,9 +5,9 @@ import 'package:questmark/models/task.dart';
 ///
 /// Widget tests run in a fake-async zone where real database I/O would
 /// hang, so they use this fake instead of SQLite. It follows the same
-/// contract and ordering as [SqfliteTaskRepository], and that real
-/// implementation is covered by its own tests against a real (in-memory)
-/// SQLite database.
+/// contract and ordering as [SqfliteTaskRepository] (including the recycle
+/// bin), and that real implementation is covered by its own tests against
+/// a real (in-memory) SQLite database.
 class FakeTaskRepository implements TaskRepository {
   FakeTaskRepository([Iterable<Task> seed = const []]) {
     for (final t in seed) {
@@ -23,11 +23,14 @@ class FakeTaskRepository implements TaskRepository {
   /// If set, the next [getAll] throws this (once).
   Object? failNextLoad;
 
-  /// If set, the next insert/update/delete throws this (once).
+  /// If set, the next write (insert/update/bin/delete) throws this (once).
   Object? failNextWrite;
 
   /// Number of write operations performed (for "did it save?" checks).
   int writes = 0;
+
+  Iterable<Task> get _live => _rows.values.where((t) => !t.isInBin);
+  Iterable<Task> get _bin => _rows.values.where((t) => t.isInBin);
 
   @override
   Future<List<Task>> getAll() async {
@@ -36,12 +39,22 @@ class FakeTaskRepository implements TaskRepository {
       failNextLoad = null;
       throw err;
     }
-    return _sorted(_rows.values);
+    return _sorted(_live);
   }
 
   @override
   Future<List<Task>> getWithLocation() async =>
-      _sorted(_rows.values.where((t) => t.hasLocation));
+      _sorted(_live.where((t) => t.hasLocation));
+
+  @override
+  Future<List<Task>> getBin() async {
+    final list = _bin.toList()
+      ..sort((a, b) {
+        final c = b.deletedAt!.compareTo(a.deletedAt!);
+        return c != 0 ? c : b.id!.compareTo(a.id!);
+      });
+    return list;
+  }
 
   @override
   Future<Task?> getById(int id) async => _rows[id];
@@ -65,9 +78,55 @@ class FakeTaskRepository implements TaskRepository {
   }
 
   @override
-  Future<bool> delete(int id) async {
+  Future<bool> moveToBin(int id, DateTime at) async {
+    _maybeFailWrite();
+    final t = _rows[id];
+    if (t == null || t.isInBin) return false;
+    _rows[id] = t.copyWith(deletedAt: () => at);
+    return true;
+  }
+
+  @override
+  Future<int> moveCompletedToBin(DateTime at) async {
+    _maybeFailWrite();
+    final done = _live.where((t) => t.isDone).toList();
+    for (final t in done) {
+      _rows[t.id!] = t.copyWith(deletedAt: () => at);
+    }
+    return done.length;
+  }
+
+  @override
+  Future<bool> restoreFromBin(int id) async {
+    _maybeFailWrite();
+    final t = _rows[id];
+    if (t == null || !t.isInBin) return false;
+    _rows[id] = t.copyWith(deletedAt: () => null);
+    return true;
+  }
+
+  @override
+  Future<bool> deletePermanently(int id) async {
     _maybeFailWrite();
     return _rows.remove(id) != null;
+  }
+
+  @override
+  Future<int> emptyBin() async {
+    _maybeFailWrite();
+    final ids = _bin.map((t) => t.id!).toList();
+    ids.forEach(_rows.remove);
+    return ids.length;
+  }
+
+  @override
+  Future<int> purgeBin({required DateTime deletedBefore}) async {
+    final ids = _bin
+        .where((t) => t.deletedAt!.isBefore(deletedBefore))
+        .map((t) => t.id!)
+        .toList();
+    ids.forEach(_rows.remove);
+    return ids.length;
   }
 
   void _maybeFailWrite() {

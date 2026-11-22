@@ -771,6 +771,45 @@ permission prompt.
   cache on C:) and the project (D:) are on different drives. This is
   project-local and only makes Kotlin compiles slightly slower.
 
+### D23. Placing a quest on the map (Phase 6)
+Two ways, both ending in the normal task editor:
+* **"Pick on map" in the editor.** The editor has a location row, laid
+  out like the due-date row: "No location" with a **Pick on map**
+  button, or the address / "Pinned on the map" with the coordinates
+  underneath and an ✕ to remove it. Tapping the row opens the picker.
+* **Long-press on the world map** → the new-quest editor opens with
+  that point already filled in (R7: "place a task by tapping a point on
+  the map"). A short vibration confirms the long-press. A plain tap
+  still clears the highlight (D20), so the two don't clash.
+
+**The picker** (full screen):
+* **The pin stays in the middle and the map moves under it**, as in
+  most map apps, instead of dragging a small marker. A finger dragging a
+  marker hides it, and small drags are hard to aim. The pin's tip marks
+  the exact point (a small dot sits under it).
+* Tapping or long-pressing a spot glides it under the pin.
+* A card at the top says what to do and shows the coordinates under the
+  pin, updating as the map moves.
+* My-location and zoom buttons, the same as on the world map (shared
+  `MapControls` and `ensureLocationAccess`). The completed-quests toggle
+  is left out, because the picker shows no quests.
+* **Starts at** the quest's current location, else the user's position
+  (live or last known), else the whole world.
+* **"Use this location"** returns the point under the pin; the back
+  button cancels and changes nothing.
+
+**Details:**
+* Picked points are **rounded to 6 decimals** (≈ 0.1 m) and the
+  longitude is wrapped into −180…180 (the map can be panned past the
+  date line).
+* **Changing the location clears the address**, because the old address
+  would describe the old point. Picking the same point keeps it.
+  Phase 7 fills in addresses (reverse geocoding on save, D6).
+* The base map is provided app-wide (`MapBaseLayer`), so the picker
+  draws the same map, and tests replace it with an empty one.
+* The camera glide moved into a shared `CameraAnimator`, so the world
+  map and the picker move the camera the same way.
+
 ---
 
 ## 4. Phases
@@ -788,12 +827,12 @@ push branch → open PR → progress report → you review → merge PR into
 | **4. Show on map** | ✅ Done (PR #6) | `feature/04-show-on-map` | Map button on list items that have a location → Map tab, centred on the task, marker highlighted. Map **zoom +/− buttons** (they share the map controller). **Completed quests hidden on the map by default, with a show/hide toggle** (D17) | focus controller, button hidden without location, tab switch, zoom buttons and limits, completed toggle |
 | **4b. List search, filter & sort** | ✅ Done (PR #7) | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **4c. Recycle bin** | ✅ Done (PR #8) | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
-| **5. GPS** | 🚧 In progress | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
-| **6. Pin on map** | ⬜ Planned | `feature/06-pin-location` | Location picker in the task editor (long-press / drag a pin) | picker returns coordinates, editor saves them |
+| **5. GPS** | ✅ Done (PR #9) | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
+| **6. Pin on map** | 🚧 In progress | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
 | **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas | — |
+| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint) | — |
 
 ---
 

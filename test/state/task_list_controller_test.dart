@@ -123,6 +123,16 @@ void main() {
       expect(controller.activeTasks.single.id, t.id);
     });
 
+    test('setDone records the completion time and clears it on reopen',
+        () async {
+      final t = controller.tasks.single;
+      await controller.setDone(t, true);
+      expect(controller.tasks.single.completedAt, now);
+
+      await controller.setDone(controller.tasks.single, false);
+      expect(controller.tasks.single.completedAt, isNull);
+    });
+
     test('setDone with the current value does not write', () async {
       final writesBefore = repo.writes;
       await controller.setDone(controller.tasks.single, false);

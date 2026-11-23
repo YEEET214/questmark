@@ -1,0 +1,2 @@
+# The bundled world map is a binary SQLite file: never touch its line endings.
+*.mbtiles binary

@@ -224,7 +224,7 @@ draws itself. This turns out to suit our needs well:
   User-Agent, tiles kept in a persistent cache (a tile already seen is never
   fetched again), and the attribution shown on the map.
 
-### D6. Address search: Nominatim, used carefully
+### D6. Address search: Nominatim, used carefully (as built: D24)
 The Nominatim policy allows at most **1 request per second**, forbids
 autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 * Search runs only when the user **presses Search**, not on each keystroke.
@@ -826,6 +826,62 @@ Two ways, both ending in the normal task editor:
   to nothing while the base map was still loading. Both map pages now
   use `StackFit.expand`, so the map always fills the page.
 
+### D24. Address search and lookup as built (Phase 7)
+Builds D6. Code: `NominatimGeocoder` (HTTP), `RateLimiter`,
+`CachingGeocodingService` + `SqfliteGeocodeCache` (schema v5), the search
+card in the location picker, and the background address lookup in
+`TaskListController`.
+
+**Where the user searches:** in the location picker (D23), not in a
+separate screen. A search field sits at the top: type an address and
+press Search (keyboard or the → button). The results (at most 5) show a
+short label and the full name; tapping one glides the map there. So one
+screen does both: search for the address, then fine-tune by moving the
+map. In the editor, the button is now **Add location** (it's no longer
+only "pick on map"), and the picker is titled **Choose location**.
+
+**Nominatim policy, and how it's met:**
+* **≤ 1 request per second, none in parallel:** every request goes
+  through one shared `RateLimiter` (start-to-start ≥ 1.1 s, one at a
+  time, a failure doesn't block the queue).
+* **No autocomplete:** a search runs only when the user presses Search,
+  never while typing (tested).
+* **Identifying User-Agent:** `QuestMark/1.0.0` (`AppInfo`, now shared
+  with the map tiles).
+* **Caching:** answers are kept in SQLite for 30 days, keyed by the
+  normalised query (trimmed, lower-case, single spaces) or by the point
+  rounded to 5 decimals (≈ 1 m). "No results" and "no address" are cached
+  too; errors are not, so they can be retried. Old rows are removed when
+  new ones are written, so the table can't grow forever. If the cache
+  fails, geocoding still works, just uncached.
+* Attribution: the results are OSM data, already credited on the maps.
+
+**Addresses (reverse geocoding):**
+* Choosing a search result gives the quest that result's address, as
+  long as the pin is still within 5 m of it. If the user then moves the
+  map elsewhere, the address is dropped (it would describe the wrong
+  place).
+* A quest saved with a location but **no address** (placed by moving the
+  map, or by long-press) gets its address looked up **after** saving, in
+  the background: the save never waits for the network. If the lookup
+  fails (offline), the quest keeps showing coordinates and the next save
+  tries again. A lookup never overwrites anything: if the quest was moved,
+  given an address or binned in the meantime, the result is dropped.
+* **Short labels:** Nominatim's full names are very long ("Oodi, 4,
+  Töölönlahdenkatu, Kluuvi, Eteläinen suurpiiri, Helsinki, …, Suomi /
+  Finland"). The app stores a short one: place name, "street number",
+  town ("Oodi, Töölönlahdenkatu 4, Helsinki"). The full name is shown
+  under each search result to tell similar places apart. The "street
+  number" order suits Finland and most of Europe; the US order ("number
+  street") could be added if needed.
+
+**Errors** are shown in the search card in plain words: no connection,
+service busy (HTTP 429), service unavailable, unreadable answer.
+
+**Not done (possible later):** biasing results towards the visible map
+area (Nominatim's `viewbox`). It would make cache hits rarer, so it was
+left out for now; adding the town to the query works well.
+
 ---
 
 ## 4. Phases
@@ -844,8 +900,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **4b. List search, filter & sort** | ✅ Done (PR #7) | `feature/04b-list-filters` | One list (no Completed section), search bar, filters and ascending/descending sorting as specified in D16; `completed_at` column (schema v2) | filter/sort rules (pure), migration v1→v2, ticked tasks stay in place, list widget tests |
 | **4c. Recycle bin** | ✅ Done (PR #8) | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ✅ Done (PR #9) | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
-| **6. Pin on map** | 🚧 In progress | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
-| **7. Address search** | ⬜ Planned | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
+| **6. Pin on map** | ✅ Done (PR #10) | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
+| **7. Address search** | 🚧 In progress | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
 | **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint) | — |

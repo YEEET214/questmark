@@ -161,13 +161,17 @@ void main() {
 
     /// A fake picker that records what it was opened with and answers
     /// [answer] (null = cancelled).
+    /// [address] simulates choosing an address-search result.
     ({LocationPicker picker, List<GeoPoint?> openedWith}) fakePicker(
-        GeoPoint? answer) {
+        GeoPoint? answer,
+        {String? address}) {
       final openedWith = <GeoPoint?>[];
       return (
         picker: (_, current) async {
           openedWith.add(current);
-          return answer;
+          return answer == null
+              ? null
+              : PickedLocation(answer, address: address);
         },
         openedWith: openedWith,
       );
@@ -196,6 +200,40 @@ void main() {
       final saved = await save(tester, result);
       expect(saved.location, helsinki);
       expect(saved.address, isNull);
+    });
+
+    testWidgets('an address chosen in the address search is shown and saved',
+        (tester) async {
+      final result = await openEditor(tester,
+          pickLocation:
+              fakePicker(helsinki, address: 'Oodi, Helsinki').picker);
+      await tester.enterText(find.byKey(const Key('titleField')), 'Quest');
+      await tester.tap(find.byKey(const Key('pickLocationButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('Oodi, Helsinki'), findsOneWidget);
+      expect(find.text('60.17000, 24.94000'), findsOneWidget);
+
+      final saved = await save(tester, result);
+      expect(saved.location, helsinki);
+      expect(saved.address, 'Oodi, Helsinki');
+    });
+
+    testWidgets('a searched address replaces the old one, even at the same '
+        'point', (tester) async {
+      final result = await openEditor(
+        tester,
+        initial: Task(
+          id: 4,
+          title: 'x',
+          createdAt: DateTime.utc(2026, 1, 1),
+          location: helsinki,
+          address: 'old name',
+        ),
+        pickLocation: fakePicker(helsinki, address: 'new name').picker,
+      );
+      await tester.tap(find.byKey(const Key('locationTile')));
+      await tester.pumpAndSettle();
+      expect((await save(tester, result)).address, 'new name');
     });
 
     testWidgets('cancelling the picker changes nothing', (tester) async {

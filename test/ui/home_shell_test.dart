@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/app.dart';
+import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
+import 'package:questmark/models/geocode_result.dart';
 import 'package:questmark/state/navigation_controller.dart';
 
+import '../helpers/fake_geocoding_service.dart';
 import '../helpers/fake_location_service.dart';
 import '../helpers/fake_task_repository.dart';
 
@@ -17,6 +20,7 @@ void main() {
         lastLocationRepository: FakeLastLocationRepository(),
         navigationController: nav,
         // No real map tiles in tests.
+        geocodingService: FakeGeocodingService(),
         mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle(); // let the task list finish loading
@@ -106,6 +110,7 @@ void main() {
         ]),
         locationService: FakeLocationService(),
         lastLocationRepository: FakeLastLocationRepository(),
+        geocodingService: FakeGeocodingService(),
         mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle();
@@ -159,6 +164,7 @@ void main() {
         taskRepository: FakeTaskRepository(),
         locationService: gps,
         lastLocationRepository: FakeLastLocationRepository(),
+        geocodingService: FakeGeocodingService(),
         mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle();
@@ -200,6 +206,7 @@ void main() {
         // The picker starts at the last known position.
         lastLocationRepository:
             FakeLastLocationRepository(fixAt(60.17, 24.94)),
+        geocodingService: FakeGeocodingService(),
         mapBaseLayer: const SizedBox.shrink(),
       ));
       await tester.pumpAndSettle();
@@ -209,7 +216,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('titleField')), 'Pinned');
       await tester.tap(find.byKey(const Key('pickLocationButton')));
       await tester.pumpAndSettle();
-      expect(find.text('Pick location'), findsOneWidget);
+      expect(find.text('Choose location'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('useLocationButton')));
       await tester.pumpAndSettle();
@@ -222,6 +229,74 @@ void main() {
       expect(saved.location!.latitude, closeTo(60.17, 1e-6));
       expect(saved.location!.longitude, closeTo(24.94, 1e-6));
       expect(find.byTooltip('Show on map'), findsOneWidget);
+    });
+  });
+  group('address search and lookup (full app, Phase 7)', () {
+    final oodi = GeocodeResult(
+      label: 'Oodi, Töölönlahdenkatu 4, Helsinki',
+      fullName: 'Oodi, 4, Töölönlahdenkatu, Helsinki, Suomi',
+      point: GeoPoint(60.17378, 24.93795),
+    );
+
+    Future<FakeTaskRepository> pumpApp(
+        WidgetTester tester, FakeGeocodingService geo) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      final repo = FakeTaskRepository();
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: repo,
+        locationService: FakeLocationService(),
+        lastLocationRepository:
+            FakeLastLocationRepository(fixAt(60.17, 24.94)),
+        geocodingService: geo,
+        mapBaseLayer: const SizedBox.shrink(),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New quest'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('titleField')), 'Return books');
+      await tester.tap(find.byKey(const Key('pickLocationButton')));
+      await tester.pumpAndSettle();
+      return repo;
+    }
+
+    testWidgets('search -> choose a result -> Save: the quest gets that '
+        'place and its address, with no extra lookup', (tester) async {
+      final geo = FakeGeocodingService(searches: {'oodi': [oodi]});
+      final repo = await pumpApp(tester, geo);
+
+      await tester.enterText(
+          find.byKey(const Key('addressSearchField')), 'oodi');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('addressResult-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('useLocationButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final saved = (await repo.getAll()).single;
+      expect(saved.address, oodi.label);
+      expect(saved.location!.latitude, closeTo(oodi.point.latitude, 1e-6));
+      expect(geo.reverseCalls, isEmpty, reason: 'it already has an address');
+    });
+
+    testWidgets('placing by moving the map -> Save: the address is looked '
+        'up afterwards', (tester) async {
+      final geo = FakeGeocodingService(
+          addresses: {GeoPoint(60.17, 24.94): 'Kaivokatu, Helsinki'});
+      final repo = await pumpApp(tester, geo);
+
+      await tester.tap(find.byKey(const Key('useLocationButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(geo.reverseCalls, [GeoPoint(60.17, 24.94)]);
+      expect((await repo.getAll()).single.address, 'Kaivokatu, Helsinki');
     });
   });
 }

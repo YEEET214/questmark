@@ -2,9 +2,11 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import '../models/task.dart';
+import 'geocode_cache_repository.dart';
 import 'last_location_repository.dart';
 
 typedef _Loc = SqfliteLastLocationRepository;
+typedef _Geo = SqfliteGeocodeCache;
 
 /// One schema migration: a list of SQL statements that moves the database
 /// from version N to N + 1.
@@ -80,6 +82,20 @@ class AppDatabase {
         ${_Loc.colRecordedAt} INTEGER NOT NULL
       )
       ''',
+    ],
+    // v5 (Phase 7): answers from Nominatim (address search and reverse
+    // lookups), so the same question is never sent twice (PLAN.md D6).
+    // The value is JSON; old rows are pruned when new ones are written.
+    [
+      '''
+      CREATE TABLE ${_Geo.table} (
+        ${_Geo.colKey}       TEXT    PRIMARY KEY,
+        ${_Geo.colValue}     TEXT    NOT NULL,
+        ${_Geo.colFetchedAt} INTEGER NOT NULL
+      )
+      ''',
+      'CREATE INDEX idx_geocode_cache_fetched '
+          'ON ${_Geo.table} (${_Geo.colFetchedAt})',
     ],
   ];
 

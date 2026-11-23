@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
+import 'package:questmark/services/geocoding_service.dart';
 import 'package:questmark/state/task_list_controller.dart';
 
 import '../helpers/fake_task_repository.dart';
+import '../helpers/fake_geocoding_service.dart';
 
 void main() {
   final now = DateTime.utc(2026, 11, 14, 10);
@@ -239,6 +243,105 @@ void main() {
           controller.save(before.single.copyWith(title: 'x')), throwsException);
       expect(controller.tasks, before);
       expect(notifications, 0);
+    });
+  });
+  group('address lookup after saving (Phase 7, D6)', () {
+    final here = GeoPoint(60.17378, 24.93795);
+    final there = GeoPoint(61.5, 23.76);
+    late FakeGeocodingService geo;
+
+    Future<void> buildWithGeocoder([List<Task> tasks = const []]) async {
+      repo = FakeTaskRepository(tasks);
+      geo = FakeGeocodingService(addresses: {
+        here: 'Oodi, Töölönlahdenkatu 4, Helsinki',
+        there: 'Tampere',
+      });
+      controller = TaskListController(repo, clock: () => now, geocoder: geo);
+      await controller.load();
+    }
+
+    test('a new pinned task gets its address filled in, in the background',
+        () async {
+      await buildWithGeocoder();
+      final saved = await controller.add(title: 'Library', location: here);
+      expect(saved.address, isNull, reason: 'add does not wait for it');
+
+      await controller.lastAddressLookup;
+      expect(geo.reverseCalls, [here]);
+      expect((await repo.getById(saved.id!))!.address,
+          'Oodi, Töölönlahdenkatu 4, Helsinki');
+      expect(controller.tasks.single.address,
+          'Oodi, Töölönlahdenkatu 4, Helsinki');
+    });
+
+    test('saving a moved task looks up the new address', () async {
+      await buildWithGeocoder([seed(1, 'x', at: here)]);
+      await controller.save(controller.tasks.single
+          .copyWith(location: () => there, address: () => null));
+      await controller.lastAddressLookup;
+      expect(controller.tasks.single.address, 'Tampere');
+    });
+
+    test('no lookup when there is an address already, or no location',
+        () async {
+      await buildWithGeocoder();
+      await controller.add(title: 'a', location: here, address: 'Given');
+      await controller.add(title: 'b');
+      expect(geo.reverseCalls, isEmpty);
+    });
+
+    test('a failed lookup leaves the coordinates; the next save retries',
+        () async {
+      await buildWithGeocoder();
+      geo.failNext = const GeocodingException(GeocodingFailure.offline);
+      final saved = await controller.add(title: 'x', location: here);
+      await controller.lastAddressLookup;
+      expect((await repo.getById(saved.id!))!.address, isNull);
+
+      await controller.save((await repo.getById(saved.id!))!);
+      await controller.lastAddressLookup;
+      expect((await repo.getById(saved.id!))!.address, isNotNull);
+    });
+
+    test('a place with no address (e.g. the sea) stays without one',
+        () async {
+      await buildWithGeocoder();
+      final saved =
+          await controller.add(title: 'Boat', location: GeoPoint(0, 0));
+      await controller.lastAddressLookup;
+      expect((await repo.getById(saved.id!))!.address, isNull);
+    });
+
+    test('never overwrites: the task moved meanwhile, or got an address',
+        () async {
+      await buildWithGeocoder();
+      geo.holdReverse = Completer();
+      final saved = await controller.add(title: 'x', location: here);
+      // Before the lookup finishes, the user moves the task elsewhere
+      // and names the address themselves.
+      await repo.update((await repo.getById(saved.id!))!
+          .copyWith(location: () => there, address: () => 'Mine'));
+      geo.holdReverse!.complete();
+      await controller.lastAddressLookup;
+      final now = (await repo.getById(saved.id!))!;
+      expect(now.address, 'Mine');
+      expect(now.location, there);
+    });
+
+    test('a task binned meanwhile is left alone', () async {
+      await buildWithGeocoder();
+      geo.holdReverse = Completer();
+      final saved = await controller.add(title: 'x', location: here);
+      await repo.moveToBin(saved.id!, now);
+      geo.holdReverse!.complete();
+      await controller.lastAddressLookup;
+      expect((await repo.getById(saved.id!))!.address, isNull);
+    });
+
+    test('without a geocoder nothing is looked up', () async {
+      build();
+      await controller.add(title: 'x', location: here);
+      expect(controller.lastAddressLookup, isNull);
     });
   });
 }

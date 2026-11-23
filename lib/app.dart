@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'data/last_location_repository.dart';
 import 'data/task_repository.dart';
+import 'services/geocoding_service.dart';
 import 'services/location_service.dart';
 import 'state/location_controller.dart';
 import 'state/map_focus_controller.dart';
@@ -24,6 +25,7 @@ class QuestMarkApp extends StatelessWidget {
     required this.taskRepository,
     required this.locationService,
     required this.lastLocationRepository,
+    required this.geocodingService,
     this.navigationController,
     this.mapBaseLayer = const OpenFreeMapLayer(),
   });
@@ -35,6 +37,10 @@ class QuestMarkApp extends StatelessWidget {
 
   /// Where the last GPS fix is remembered between app starts (D19).
   final LastLocationRepository lastLocationRepository;
+
+  /// Address search and lookup (Nominatim behind a cache, PLAN.md D6).
+  /// Tests pass a fake, so they never touch the network.
+  final GeocodingService geocodingService;
 
   /// Optional pre-built controller, mainly for tests.
   final NavigationController? navigationController;
@@ -50,6 +56,7 @@ class QuestMarkApp extends StatelessWidget {
         // The base map for pages pushed on top of the shell (the location
         // picker), so they draw the same map and tests can replace it.
         Provider<MapBaseLayer>.value(value: MapBaseLayer(mapBaseLayer)),
+        Provider<GeocodingService>.value(value: geocodingService),
         ChangeNotifierProvider<NavigationController>(
           create: (_) => navigationController ?? NavigationController(),
         ),
@@ -60,7 +67,9 @@ class QuestMarkApp extends StatelessWidget {
           create: (_) => TaskListViewController(),
         ),
         ChangeNotifierProvider<TaskListController>(
-          create: (_) => TaskListController(taskRepository)..load(),
+          create: (_) =>
+              TaskListController(taskRepository, geocoder: geocodingService)
+                ..load(),
         ),
         ChangeNotifierProvider<LocationController>(
           create: (_) =>

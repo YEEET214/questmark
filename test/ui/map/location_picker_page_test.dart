@@ -242,6 +242,19 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    testWidgets('a note under the search field says what is sent to '
+        'Nominatim (PR #11 review)', (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      final note = find.byKey(const Key('nominatimNote'));
+      expect(note, findsOneWidget);
+      expect(find.textContaining('Nominatim'), findsOneWidget);
+      expect(tester.getRect(note).top,
+          greaterThanOrEqualTo(tester
+              .getRect(find.byKey(const Key('addressSearchField')))
+              .bottom),
+          reason: 'under the search field');
+    });
+
     testWidgets('typing alone never searches (no autocomplete)',
         (tester) async {
       await openPicker(tester, geocoder: geocoder());

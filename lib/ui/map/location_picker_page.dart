@@ -398,6 +398,20 @@ class _LocationPickerPageState extends State<LocationPickerPage>
                       ),
               ),
             ),
+            // Be open about what leaves the phone (user decision, PR #11
+            // review): search text, and the location of quests that need
+            // an address. The GPS position is never sent.
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                'Searches and quest locations are sent to OpenStreetMap\'s '
+                'Nominatim service to find addresses.',
+                key: const Key('nominatimNote'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
             if (error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),

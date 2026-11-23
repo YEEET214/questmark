@@ -878,6 +878,11 @@ only "pick on map"), and the picker is titled **Choose location**.
 **Errors** are shown in the search card in plain words: no connection,
 service busy (HTTP 429), service unavailable, unreadable answer.
 
+**Privacy note (user decision, PR #11 review):** under the search field
+the picker says "Searches and quest locations are sent to OpenStreetMap's
+Nominatim service to find addresses." The GPS position is never sent;
+the location card's "never leaves your phone" stays true for it.
+
 **Not done (possible later):** biasing results towards the visible map
 area (Nominatim's `viewbox`). It would make cache hits rarer, so it was
 left out for now; adding the town to the query works well.

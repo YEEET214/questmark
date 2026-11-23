@@ -880,8 +880,10 @@ service busy (HTTP 429), service unavailable, unreadable answer.
 
 **Privacy note (user decision, PR #11 review):** under the search field
 the picker says "Searches and quest locations are sent to OpenStreetMap's
-Nominatim service to find addresses." The GPS position is never sent;
-the location card's "never leaves your phone" stays true for it.
+Nominatim service to find addresses. Your own location is never sent."
+(The last sentence was added at the user's request.) It's true: the GPS
+position is never sent, so the location card's "never leaves your phone"
+stays true for it.
 
 **Not done (possible later):** biasing results towards the visible map
 area (Nominatim's `viewbox`). It would make cache hits rarer, so it was

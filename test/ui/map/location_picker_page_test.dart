@@ -248,6 +248,8 @@ void main() {
       final note = find.byKey(const Key('nominatimNote'));
       expect(note, findsOneWidget);
       expect(find.textContaining('Nominatim'), findsOneWidget);
+      expect(find.textContaining('Your own location is never sent.'),
+          findsOneWidget);
       expect(tester.getRect(note).top,
           greaterThanOrEqualTo(tester
               .getRect(find.byKey(const Key('addressSearchField')))

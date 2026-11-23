@@ -405,7 +405,8 @@ class _LocationPickerPageState extends State<LocationPickerPage>
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 'Searches and quest locations are sent to OpenStreetMap\'s '
-                'Nominatim service to find addresses.',
+                'Nominatim service to find addresses. Your own location is '
+                'never sent.',
                 key: const Key('nominatimNote'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,

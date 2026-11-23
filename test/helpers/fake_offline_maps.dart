@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/offline_region.dart';
@@ -30,6 +32,13 @@ class FakeOfflineMaps extends ChangeNotifier implements OfflineMapsController {
   final deleted = <int>[];
   final renamed = <(int, String)>[];
   int pauses = 0;
+
+  /// If set, [delete] waits for it, so a test can see "Deleting…".
+  Completer<void>? holdDelete;
+  final _deleting = <int>{};
+
+  @override
+  bool isDeleting(int id) => _deleting.contains(id);
 
   @override
   bool get isDownloading => progress != null;
@@ -97,6 +106,10 @@ class FakeOfflineMaps extends ChangeNotifier implements OfflineMapsController {
   @override
   Future<void> delete(int id) async {
     deleted.add(id);
+    _deleting.add(id);
+    notifyListeners();
+    await holdDelete?.future;
+    _deleting.remove(id);
     regions = [for (final r in regions) if (r.id != id) r];
     notifyListeners();
   }

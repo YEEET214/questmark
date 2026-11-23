@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -121,6 +123,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(maps.deleted, [1]);
     expect(find.byKey(const Key('noRegions')), findsOneWidget);
+  });
+
+  testWidgets('while deleting: "Deleting…", a moving bar, and no menu '
+      '(user report)', (tester) async {
+    maps.regions = [region(1, name: 'Dundee')];
+    maps.holdDelete = Completer<void>();
+    await pump(tester);
+    await openMenu(tester, 1);
+    await tester.tap(find.byKey(const Key('regionDelete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('regionDeleteYes')));
+    // Not pumpAndSettle: the bar keeps moving until it's done.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Deleting…'), findsOneWidget);
+    expect(find.byKey(const Key('regionDeleting')), findsOneWidget);
+    expect(
+        tester
+            .widget<LinearProgressIndicator>(
+                find.byKey(const Key('regionDeleting')))
+            .value,
+        isNull,
+        reason: 'indeterminate');
+    expect(find.byKey(const Key('regionMenu-1')), findsNothing);
+
+    maps.holdDelete!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Dundee'), findsNothing);
+    expect(find.byKey(const Key('regionDeleting')), findsNothing);
   });
 
   testWidgets('rename', (tester) async {

@@ -40,6 +40,7 @@ class OfflineMapsController extends ChangeNotifier {
   DownloadProgress? _progress;
   DownloadCancel? _cancel;
   Future<void>? _running;
+  final _deleting = <int>{};
   bool _disposed = false;
 
   /// Newest first.
@@ -53,6 +54,10 @@ class OfflineMapsController extends ChangeNotifier {
   DownloadProgress? get progress => _progress;
   bool get isDownloading => _running != null;
   int? get activeRegionId => isDownloading ? _progress?.regionId : null;
+
+  /// Whether [id] is being deleted (it can take a few seconds: the file is
+  /// compacted afterwards to give the space back).
+  bool isDeleting(int id) => _deleting.contains(id);
 
   /// Whether the map may offer to download the user's area (off after
   /// "Don't ask again"; can be turned back on in Offline maps).
@@ -140,10 +145,16 @@ class OfflineMapsController extends ChangeNotifier {
   /// Deletes a region (stopping it first if it's downloading). Tiles that
   /// another region also uses are kept.
   Future<void> delete(int id) async {
-    if (activeRegionId == id) await pause();
-    await _store.deleteRegion(id);
-    await _reload();
+    if (!_deleting.add(id)) return; // already being deleted
     _notify();
+    try {
+      if (activeRegionId == id) await pause();
+      await _store.deleteRegion(id);
+      await _reload();
+    } finally {
+      _deleting.remove(id);
+      _notify();
+    }
   }
 
   void _start(OfflineRegion region) {

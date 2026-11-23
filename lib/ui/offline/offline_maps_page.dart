@@ -71,6 +71,7 @@ class OfflineMapsPage extends StatelessWidget {
                       region: r,
                       progress:
                           c.activeRegionId == r.id ? c.progress : null,
+                      deleting: c.isDeleting(r.id),
                     ),
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -152,9 +153,16 @@ class _RenameDialogState extends State<_RenameDialog> {
 }
 
 class _RegionTile extends StatelessWidget {
-  const _RegionTile({required this.region, this.progress});
+  const _RegionTile({
+    required this.region,
+    this.progress,
+    this.deleting = false,
+  });
 
   final OfflineRegion region;
+
+  /// Shows "Deleting…" with a moving bar, and no menu, until it's gone.
+  final bool deleting;
 
   /// Set while this region is downloading.
   final DownloadProgress? progress;
@@ -174,6 +182,7 @@ class _RegionTile extends StatelessWidget {
       key: Key('region-${r.id}'),
       leading: Icon(
         switch (r.status) {
+          _ when deleting => Icons.delete_outline,
           _ when p != null => Icons.downloading,
           RegionStatus.complete ||
           RegionStatus.limitReached =>
@@ -186,10 +195,21 @@ class _RegionTile extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(p != null ? 'Downloading…' : regionStatusText(r),
+          Text(
+              deleting
+                  ? 'Deleting…'
+                  : p != null
+                      ? 'Downloading…'
+                      : regionStatusText(r),
               key: Key('regionStatus-${r.id}')),
           Text(details),
-          if (p != null)
+          if (deleting)
+            // No percentage to show: SQLite deletes and compacts in one go.
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: LinearProgressIndicator(key: Key('regionDeleting')),
+            )
+          else if (p != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: LinearProgressIndicator(value: p.fraction),
@@ -197,7 +217,9 @@ class _RegionTile extends StatelessWidget {
         ],
       ),
       isThreeLine: true,
-      trailing: PopupMenuButton<_Action>(
+      trailing: deleting
+          ? null
+          : PopupMenuButton<_Action>(
         key: Key('regionMenu-${r.id}'),
         tooltip: 'More',
         onSelected: (a) => _act(context, c, a),

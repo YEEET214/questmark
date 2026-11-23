@@ -120,6 +120,19 @@ void main() {
     expect(await store.hasTiles(), isFalse);
   });
 
+  test('isDeleting is true while a region is being deleted', () async {
+    final region = await c.download(dundee, RegionSize.small);
+    await c.running;
+    final seen = <bool>[];
+    c.addListener(() => seen.add(c.isDeleting(region.id)));
+    final deleting = c.delete(region.id);
+    expect(c.isDeleting(region.id), isTrue);
+    await deleting;
+    expect(c.isDeleting(region.id), isFalse);
+    expect(seen.first, isTrue);
+    expect(seen.last, isFalse);
+  });
+
   test('rename (blank names are ignored)', () async {
     final region = await c.download(dundee, RegionSize.small);
     await c.running;

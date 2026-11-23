@@ -4,25 +4,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:questmark/models/geo_point.dart';
+import 'package:questmark/models/geocode_result.dart';
+import 'package:questmark/services/geocoding_service.dart';
 import 'package:questmark/services/location_service.dart';
 import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/ui/map/base_map_layer.dart';
 import 'package:questmark/ui/map/location_picker_page.dart';
 import 'package:questmark/ui/map/map_config.dart';
 
+import '../../helpers/fake_geocoding_service.dart';
 import '../../helpers/fake_location_service.dart';
 
 void main() {
   late MapController map;
   late FakeLocationService gps;
   late LocationController location;
+  late FakeGeocodingService geo;
 
   /// Pumps a launcher that opens the picker (via [pickLocationOnMap], the
   /// same way the editor does) and returns a getter for its result.
   /// Animations are off, so camera moves are instant.
-  Future<GeoPoint? Function()> openPicker(
+  Future<PickedLocation? Function()> openPicker(
     WidgetTester tester, {
     GeoPoint? initial,
+    FakeGeocodingService? geocoder,
     FakeLocationService? gpsService,
     FakeLastLocationRepository? saved,
   }) async {
@@ -37,17 +42,19 @@ void main() {
     await location.start();
     addTearDown(location.dispose);
 
-    GeoPoint? result;
+    geo = geocoder ?? FakeGeocodingService();
+    PickedLocation? result;
     await tester.pumpWidget(MultiProvider(
       providers: [
         Provider.value(value: const MapBaseLayer(SizedBox.shrink())),
         ChangeNotifierProvider.value(value: location),
+        Provider<GeocodingService>.value(value: geo),
       ],
       child: MaterialApp(
         home: Builder(
           builder: (context) => TextButton(
             onPressed: () async {
-              result = await Navigator.of(context).push<GeoPoint>(
+              result = await Navigator.of(context).push<PickedLocation>(
                 MaterialPageRoute(
                   builder: (_) =>
                       LocationPickerPage(initial: initial, mapController: map),
@@ -106,7 +113,7 @@ void main() {
 
     await useThisLocation(tester);
     expect(find.byType(LocationPickerPage), findsNothing);
-    expect(result(), GeoPoint(60.171235, 24.951235));
+    expect(result(), PickedLocation(GeoPoint(60.171235, 24.951235)));
   });
 
   testWidgets('the back button cancels: no point is returned',
@@ -212,5 +219,124 @@ void main() {
     gps.emit(fixAt(61.0, 25.0));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('player-marker')), findsOneWidget);
+  });
+  group('address search (Phase 7, D6)', () {
+    final oodi = GeocodeResult(
+      label: 'Oodi, Töölönlahdenkatu 4, Helsinki',
+      fullName: 'Oodi, 4, Töölönlahdenkatu, Kluuvi, Helsinki, Suomi',
+      point: GeoPoint(60.17378, 24.93795),
+    );
+    final oodiTampere = GeocodeResult(
+      label: 'Oodi Café, Tampere',
+      fullName: 'Oodi Café, Hämeenkatu, Tampere, Suomi',
+      point: GeoPoint(61.4978, 23.7610),
+    );
+
+    FakeGeocodingService geocoder() =>
+        FakeGeocodingService(searches: {'oodi': [oodi, oodiTampere]});
+
+    Future<void> search(WidgetTester tester, String query) async {
+      await tester.enterText(
+          find.byKey(const Key('addressSearchField')), query);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('typing alone never searches (no autocomplete)',
+        (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      await tester.enterText(
+          find.byKey(const Key('addressSearchField')), 'oodi');
+      await tester.pumpAndSettle();
+      expect(geo.searchCalls, isEmpty);
+    });
+
+    testWidgets('pressing Search shows the results', (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      await search(tester, 'oodi');
+      expect(geo.searchCalls, ['oodi']);
+      expect(find.text(oodi.label), findsOneWidget);
+      expect(find.text(oodi.fullName), findsOneWidget);
+      expect(find.text(oodiTampere.label), findsOneWidget);
+    });
+
+    testWidgets('the search button works too; a blank query does nothing',
+        (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      await tester.tap(find.byKey(const Key('addressSearchButton')));
+      await tester.pumpAndSettle();
+      expect(geo.searchCalls, isEmpty);
+
+      await tester.enterText(
+          find.byKey(const Key('addressSearchField')), '  oodi ');
+      await tester.tap(find.byKey(const Key('addressSearchButton')));
+      await tester.pumpAndSettle();
+      expect(geo.searchCalls, ['oodi'], reason: 'trimmed');
+    });
+
+    testWidgets('choosing a result moves the pin there and returns its '
+        'address', (tester) async {
+      final result = await openPicker(tester, geocoder: geocoder());
+      await search(tester, 'oodi');
+      await tester.tap(find.byKey(const Key('addressResult-0')));
+      await tester.pumpAndSettle();
+
+      expectCameraAt(oodi.point.latitude, oodi.point.longitude);
+      expect(map.camera.zoom, MapConfig.questZoom);
+      expect(find.byKey(const Key('addressResult-1')), findsNothing,
+          reason: 'the list closes');
+      expect(find.byKey(const Key('pickerAddress')), findsOneWidget);
+
+      await useThisLocation(tester);
+      expect(result(), PickedLocation(oodi.point, address: oodi.label));
+    });
+
+    testWidgets('moving the pin away from the result drops its address',
+        (tester) async {
+      final result = await openPicker(tester, geocoder: geocoder());
+      await search(tester, 'oodi');
+      await tester.tap(find.byKey(const Key('addressResult-0')));
+      await tester.pumpAndSettle();
+
+      // About 50 m north: a different place.
+      map.move(LatLng(oodi.point.latitude + 0.00045, oodi.point.longitude),
+          map.camera.zoom);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pickerAddress')), findsNothing);
+
+      await useThisLocation(tester);
+      expect(result()!.address, isNull);
+    });
+
+    testWidgets('no results: says so', (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      await search(tester, 'nowhere at all');
+      expect(find.textContaining('No places found for "nowhere at all"'),
+          findsOneWidget);
+    });
+
+    testWidgets('a failed search explains why, and can be retried',
+        (tester) async {
+      final g = geocoder()
+        ..failNext = const GeocodingException(GeocodingFailure.offline);
+      await openPicker(tester, geocoder: g);
+      await search(tester, 'oodi');
+      expect(find.byKey(const Key('addressSearchError')), findsOneWidget);
+      expect(find.textContaining('No connection'), findsOneWidget);
+
+      await search(tester, 'oodi');
+      expect(find.byKey(const Key('addressSearchError')), findsNothing);
+      expect(find.text(oodi.label), findsOneWidget);
+    });
+
+    testWidgets('tapping the map closes the results list', (tester) async {
+      await openPicker(tester, geocoder: geocoder());
+      await search(tester, 'oodi');
+      final mapRect = tester.getRect(find.byType(FlutterMap));
+      await tester.tapAt(mapRect.bottomLeft + const Offset(60, -120));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text(oodi.label), findsNothing);
+    });
   });
 }

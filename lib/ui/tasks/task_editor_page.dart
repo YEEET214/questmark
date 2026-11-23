@@ -46,9 +46,9 @@ class TaskEditorDeleted extends TaskEditorResult {
 /// and easy to test. Fields it doesn't show (the done state) are left
 /// untouched by the caller.
 ///
-/// The location is optional. "Pick on map" opens [pickLocation] (the
-/// full-screen [LocationPickerPage] by default, PLAN.md D23). Address
-/// search arrives in Phase 7.
+/// The location is optional. "Add location" (or tapping the row) opens
+/// [pickLocation]: by default the full-screen [LocationPickerPage], where
+/// the user can move the map or search for an address (PLAN.md D6, D23).
 class TaskEditorPage extends StatefulWidget {
   const TaskEditorPage({
     super.key,
@@ -125,12 +125,20 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
     // After "remove", the picker still starts at the removed location.
     final picked =
         await widget.pickLocation(context, _location ?? _removedLocation);
-    if (!mounted || picked == null || picked == _location) return;
+    if (!mounted || picked == null) return;
+    final point = picked.point;
     setState(() {
-      _location = picked;
-      // An address belongs to its point: the old one is wrong for a new
-      // point, but comes back if the removed point is picked again.
-      _address = picked == _removedLocation ? _removedAddress : null;
+      // An address from the address search always wins. Otherwise an
+      // address belongs to its point: kept for the same point, restored
+      // if the removed point is picked again, and dropped for a new point
+      // (it's looked up after saving, D6).
+      _address = picked.address ??
+          (point == _location
+              ? _address
+              : point == _removedLocation
+                  ? _removedAddress
+                  : null);
+      _location = point;
     });
   }
 
@@ -291,7 +299,7 @@ class _LocationTile extends StatelessWidget {
           ? TextButton(
               key: const Key('pickLocationButton'),
               onPressed: onPick,
-              child: const Text('Pick on map'),
+              child: const Text('Add location'),
             )
           : IconButton(
               key: const Key('clearLocationButton'),

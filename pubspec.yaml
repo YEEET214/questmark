@@ -41,6 +41,7 @@ dependencies:
   flutter_map_vector_tiles: 2.11.0
   latlong2: ^0.10.1
   geolocator: ^14.1.2
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

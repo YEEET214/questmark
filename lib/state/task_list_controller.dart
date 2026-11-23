@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../data/task_repository.dart';
 import '../models/geo_point.dart';
 import '../models/task.dart';
+import '../services/geocoding_service.dart';
 
 /// App-wide task state, shared by the list page and (from phase 3) the map.
 ///
@@ -14,8 +15,11 @@ import '../models/task.dart';
 /// a reload takes about a millisecond, so the simple approach costs nothing
 /// noticeable, and the database stays the single source of truth.
 class TaskListController extends ChangeNotifier {
-  TaskListController(this._repository, {DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+  TaskListController(
+    this._repository, {
+    DateTime Function()? clock,
+    this.geocoder,
+  }) : _clock = clock ?? DateTime.now;
 
   /// How long a deleted task stays in the recycle bin before it is removed
   /// for good (PLAN.md D18).
@@ -25,6 +29,15 @@ class TaskListController extends ChangeNotifier {
 
   /// Injected so tests can control `createdAt` timestamps.
   final DateTime Function() _clock;
+
+  /// Looks up addresses for pinned tasks (PLAN.md D6). Optional: without
+  /// it, tasks simply keep showing their coordinates.
+  final GeocodingService? geocoder;
+
+  /// The address lookup started by the last add/save, if any. Lets tests
+  /// wait for it; the UI never needs to.
+  @visibleForTesting
+  Future<void>? lastAddressLookup;
 
   List<Task> _tasks = const [];
   List<Task> _binTasks = const [];
@@ -98,6 +111,7 @@ class TaskListController extends ChangeNotifier {
       createdAt: _clock(),
     ));
     await _refresh();
+    _lookUpAddressLater(saved);
     return saved;
   }
 
@@ -105,6 +119,49 @@ class TaskListController extends ChangeNotifier {
   Future<void> save(Task task) async {
     await _repository.update(task);
     await _refresh();
+    _lookUpAddressLater(task);
+  }
+
+  /// A saved task with a location but no address (pinned on the map) gets
+  /// its address looked up once, in the background (PLAN.md D6). The save
+  /// itself never waits for the network. If the lookup fails (e.g.
+  /// offline), the task keeps its coordinates and the next save tries
+  /// again.
+  void _lookUpAddressLater(Task task) {
+    final geocoder = this.geocoder;
+    final id = task.id;
+    final point = task.location;
+    if (geocoder == null || id == null || point == null) return;
+    if (task.address != null) return;
+    lastAddressLookup = _lookUpAddress(geocoder, id, point);
+  }
+
+  Future<void> _lookUpAddress(
+      GeocodingService geocoder, int id, GeoPoint point) async {
+    final String? address;
+    try {
+      address = await geocoder.reverse(point);
+    } catch (e) {
+      debugPrint('Address lookup failed: $e');
+      return;
+    }
+    if (address == null || _disposed) return;
+    try {
+      // Re-read: the user may have moved the quest, added an address or
+      // deleted it while the lookup was running. Only fill in an address
+      // for the same point, and never overwrite one.
+      final current = await _repository.getById(id);
+      if (current == null ||
+          current.isInBin ||
+          current.location != point ||
+          current.address != null) {
+        return;
+      }
+      await _repository.update(current.copyWith(address: () => address));
+      await _refresh();
+    } catch (e) {
+      debugPrint('Saving the looked-up address failed: $e');
+    }
   }
 
   /// Ticks or unticks [task]. Ticking records the completion time (from
@@ -177,6 +234,14 @@ class TaskListController extends ChangeNotifier {
     _tasks = await _repository.getAll();
     _binTasks = await _repository.getBin();
     _loadError = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
+  }
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

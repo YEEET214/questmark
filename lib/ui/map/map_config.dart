@@ -1,5 +1,7 @@
 import 'package:latlong2/latlong.dart';
 
+import '../../app_info.dart';
+
 /// Everything about where the map comes from and how it behaves, in one
 /// place. See PLAN.md D4/D5 for why these values were chosen.
 abstract final class MapConfig {
@@ -9,13 +11,12 @@ abstract final class MapConfig {
   /// (PLAN.md D4).
   static const styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 
-  /// App version, sent in the User-Agent. Keep in sync with pubspec.yaml
-  /// (a test checks this).
-  static const appVersion = '1.0.0';
+  /// App version, sent in the User-Agent (see [AppInfo]).
+  static const appVersion = AppInfo.version;
 
   /// OpenFreeMap requires a unique, stable User-Agent. It names only the
   /// app and its version.
-  static const userAgent = 'QuestMark/$appVersion';
+  static const userAgent = AppInfo.userAgent;
 
   static const httpHeaders = {'User-Agent': userAgent};
 

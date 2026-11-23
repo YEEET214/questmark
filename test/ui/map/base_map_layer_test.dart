@@ -41,7 +41,7 @@ vt.Style _style(String name) => vt.Style(
 /// loading fails.
 Future<MbTilesArchive?> noWorldMap() async => null;
 
-Future<vt.Style> noOfflineStyle(MbTilesArchive _, RegionTileSource? _) =>
+Future<vt.Style> noOfflineStyle(LocalTiles _) =>
     Future.error(StateError('no offline style expected'));
 
 void main() {
@@ -63,6 +63,7 @@ void main() {
               loadStyle: loader,
               loadWorldMap: loadWorldMap,
               loadOfflineStyle: loadOfflineStyle,
+              loadTileCache: noTileCache,
             ),
           ],
         ),
@@ -121,7 +122,7 @@ void main() {
         );
         expect(map.offline, isFalse);
         expect(map.style, same(online));
-        expect(map.providers['openmaptiles'], isA<LocalFirstTileProvider>());
+        expect(map.providers()['openmaptiles'], isA<LocalFirstTileProvider>());
       });
 
       test('online without a world map: the style as it is', () async {
@@ -131,7 +132,7 @@ void main() {
           loadOfflineStyle: noOfflineStyle,
           loadWorldMap: noWorldMap,
         );
-        expect(map.providers, same(online.providers));
+        expect(map.providers(), same(online.providers));
       });
 
       test('no connection at all: the bundled offline style', () async {
@@ -139,8 +140,8 @@ void main() {
         MbTilesArchive? usedWorld;
         final map = await loadBaseMap(
           loadStyle: () async => throw Exception('offline'),
-          loadOfflineStyle: (w, _) async {
-            usedWorld = w;
+          loadOfflineStyle: (local) async {
+            usedWorld = local.world;
             return offline;
           },
           loadWorldMap: () async => world,
@@ -158,7 +159,7 @@ void main() {
           loadWorldMap: () async => throw StateError('broken file'),
         );
         expect(map.offline, isFalse);
-        expect(map.providers, same(online.providers));
+        expect(map.providers(), same(online.providers));
       });
 
       test('downloaded regions are passed on, online and offline (D26)',
@@ -171,13 +172,13 @@ void main() {
           regions: regions,
         );
         expect(
-            online.providers['openmaptiles'], isA<LocalFirstTileProvider>());
+            online.providers()['openmaptiles'], isA<LocalFirstTileProvider>());
 
         RegionTileSource? usedRegions;
         await loadBaseMap(
           loadStyle: () async => throw Exception('offline'),
-          loadOfflineStyle: (_, r) async {
-            usedRegions = r;
+          loadOfflineStyle: (local) async {
+            usedRegions = local.regions;
             return _style('offline');
           },
           loadWorldMap: () async => world,
@@ -204,7 +205,7 @@ void main() {
         tester,
         () async => throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_, _) async => _style('offline'),
+        loadOfflineStyle: (_) async => _style('offline'),
       );
       await tester.pumpAndSettle();
 
@@ -221,7 +222,7 @@ void main() {
         tester,
         () async => online ? _style('online') : throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_, _) async => _style('offline'),
+        loadOfflineStyle: (_) async => _style('offline'),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('mapOfflineBanner')), findsOneWidget);
@@ -239,7 +240,7 @@ void main() {
         tester,
         () async => throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_, _) async => _style('offline'),
+        loadOfflineStyle: (_) async => _style('offline'),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Retry'));

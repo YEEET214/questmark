@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart' show getDatabasesPath;
 
 import '../../data/mbtiles_archive.dart';
 import '../../data/offline_region_store.dart';
+import '../../data/tile_cache.dart';
 import '../../data/world_map_installer.dart';
 import 'map_config.dart';
 import 'world_map_tiles.dart';
@@ -12,13 +13,15 @@ import 'world_map_tiles.dart';
 /// references).
 typedef StyleLoader = Future<vt.Style> Function();
 
-/// Loads the bundled offline style, drawing from [world] and the
-/// downloaded [regions].
-typedef OfflineStyleLoader = Future<vt.Style> Function(
-    MbTilesArchive world, RegionTileSource? regions);
+/// Loads the bundled offline style, drawing from what's on the phone
+/// ([local] always has a world map here).
+typedef OfflineStyleLoader = Future<vt.Style> Function(LocalTiles local);
 
 /// Opens the bundled world map, or returns `null` if there is none.
 typedef WorldMapLoader = Future<MbTilesArchive?> Function();
+
+/// Opens the browse cache, or returns `null` if it can't be opened.
+typedef TileCacheLoader = Future<NetworkTileCache?> Function();
 
 /// The base map widget, provided app-wide (`Provider<MapBaseLayer>`), so a
 /// page pushed on top of the shell, like the location picker, draws the
@@ -40,25 +43,17 @@ Future<vt.Style> loadOpenFreeMapStyle() => vt.StyleReader(
     ).read();
 
 /// The offline copy of the style bundled with the app
-/// (`tool/build_world_map.dart` writes it): OpenFreeMap's look, but with
-/// every tile from the world map file and nothing fetched from the
-/// network (no icons, and the phone's own fonts for labels).
-///
-/// With downloaded regions, their detailed tiles are drawn too (zoom
-/// 5-14); without, the zoom-4 world map is enlarged at closer zooms.
-Future<vt.Style> loadOfflineWorldStyle(
-    MbTilesArchive world, RegionTileSource? regions) async {
-  final withRegions = regions != null && await regions.hasTiles();
-  return vt.StyleReader(
-    uri: 'asset://${MapConfig.offlineStyleAsset}',
-    cache: false,
-    resolveProvider: (id) async => id != MapConfig.tileSourceId
-        ? null
-        : withRegions
-            ? OfflineTileProvider(world, regions)
-            : WorldMapTileProvider(world),
-  ).read();
-}
+/// (`tool/build_world_map.dart` writes it): OpenFreeMap's look, with every
+/// tile from the phone and nothing fetched from the network (no icons,
+/// and the phone's own fonts for labels). Downloaded regions and cached
+/// tiles are drawn in detail; elsewhere the world map is enlarged (D27).
+Future<vt.Style> loadOfflineWorldStyle(LocalTiles local) => vt.StyleReader(
+      uri: 'asset://${MapConfig.offlineStyleAsset}',
+      cache: false,
+      resolveProvider: (id) async => id == MapConfig.tileSourceId
+          ? OfflineTileProvider(local, version: local.world!.version)
+          : null,
+    ).read();
 
 Future<MbTilesArchive?>? _bundledWorld;
 
@@ -78,51 +73,88 @@ Future<MbTilesArchive?> openBundledWorldMap() {
   }();
 }
 
+Future<NetworkTileCache?>? _tileCache;
+
+/// The browse cache (PLAN.md D27), opened once for the whole app. `null`
+/// if it can't be opened; the map then simply fetches what it shows.
+Future<NetworkTileCache?> openAppTileCache() {
+  return _tileCache ??= () async {
+    try {
+      return await SqfliteTileCache.open(
+        maxBytes: MapConfig.tileCacheBytes,
+        ttl: MapConfig.diskCacheTtl,
+      );
+    } catch (e) {
+      debugPrint('Tile cache unavailable: $e');
+      return null;
+    }
+  }();
+}
+
+Future<NetworkTileCache?> noTileCache() async => null;
+
 /// What the base map ended up drawing from.
 class BaseMap {
-  const BaseMap(this.style, this.providers, {required this.offline});
+  const BaseMap(this.style, {required this.offline, required this.local});
 
   final vt.Style style;
-
-  /// The tile providers to draw with: the style's own, with the world map
-  /// (zoom 0-4) and the downloaded regions (zoom 5-14) in front.
-  final vt.TileProviders providers;
 
   /// True when the online style couldn't be loaded and the bundled
   /// offline style is shown instead.
   final bool offline;
+
+  /// What's on the phone: the world map, regions and browse cache.
+  final LocalTiles local;
+
+  /// The tile providers to draw with. Online: the style's own, with the
+  /// world map (zoom 0-4), the regions (zoom 5-14) and the browse cache in
+  /// front, and stand-in tiles while offline (D27). [generation] and
+  /// [onRecovered]: see [LocalFirstTileProvider].
+  vt.TileProviders providers({int generation = 0, VoidCallback? onRecovered}) =>
+      offline
+          ? style.providers
+          : withLocalMaps(
+              style.providers,
+              world: local.world,
+              regions: local.regions,
+              cache: local.cache,
+              generation: generation,
+              onRecovered: onRecovered,
+            );
 }
 
 /// Loads the base map in this order (PLAN.md D7):
 /// 1. the online OpenFreeMap style (from its disk cache when offline),
-///    with the bundled world map serving zoom 0-4 and the downloaded
-///    regions zoom 5-14;
+///    with what's on the phone in front (see [BaseMap.providers]);
 /// 2. if that fails (e.g. the very first launch without a connection):
-///    the bundled offline style on the world map alone;
+///    the bundled offline style, drawn from the phone alone;
 /// 3. if there's no world map either, the error from step 1 is thrown.
 Future<BaseMap> loadBaseMap({
   required StyleLoader loadStyle,
   required OfflineStyleLoader loadOfflineStyle,
   required WorldMapLoader loadWorldMap,
+  TileCacheLoader loadTileCache = noTileCache,
   RegionTileSource? regions,
 }) async {
-  MbTilesArchive? world;
-  try {
-    world = await loadWorldMap();
-  } catch (e) {
-    debugPrint('World map unavailable: $e');
+  Future<T?> quietly<T>(Future<T?> Function() open, String what) async {
+    try {
+      return await open();
+    } catch (e) {
+      debugPrint('$what unavailable: $e');
+      return null;
+    }
   }
+
+  final world = await quietly(loadWorldMap, 'World map');
+  final cache = await quietly(loadTileCache, 'Tile cache');
+  final local = LocalTiles(world: world, regions: regions, cache: cache);
   try {
     final style = await loadStyle();
-    return BaseMap(
-      style,
-      withLocalMaps(style.providers, world: world, regions: regions),
-      offline: false,
-    );
+    return BaseMap(style, offline: false, local: local);
   } catch (_) {
     if (world == null) rethrow;
-    final style = await loadOfflineStyle(world, regions);
-    return BaseMap(style, style.providers, offline: true);
+    final style = await loadOfflineStyle(local);
+    return BaseMap(style, offline: true, local: local);
   }
 }
 
@@ -132,16 +164,20 @@ Future<BaseMap> loadBaseMap({
 ///
 /// Zoom 0-4 always come from the world map bundled with the app, so the
 /// whole world shows even with no connection. Closer zooms come from the
-/// downloaded regions ([regionTiles]) where there are any, else from
-/// OpenFreeMap (and its disk cache). If the online style can't be loaded
-/// at all, the bundled offline style is shown with a small "offline"
-/// banner and Retry. Only if that fails too is the error banner shown.
+/// downloaded regions ([regionTiles]) where there are any, then the browse
+/// cache, then OpenFreeMap. Offline, tiles that aren't on the phone are
+/// drawn by enlarging the nearest less detailed one, so the map never goes
+/// blank (D27); once the network answers again, the map reloads with the
+/// real tiles. If the online style can't be loaded at all, the bundled
+/// offline style is shown with a small "offline" banner and Retry. Only if
+/// that fails too is the error banner shown.
 class OpenFreeMapLayer extends StatefulWidget {
   const OpenFreeMapLayer({
     super.key,
     this.loadStyle = loadOpenFreeMapStyle,
     this.loadOfflineStyle = loadOfflineWorldStyle,
     this.loadWorldMap = openBundledWorldMap,
+    this.loadTileCache = openAppTileCache,
     this.regionTiles,
   });
 
@@ -149,6 +185,7 @@ class OpenFreeMapLayer extends StatefulWidget {
   final StyleLoader loadStyle;
   final OfflineStyleLoader loadOfflineStyle;
   final WorldMapLoader loadWorldMap;
+  final TileCacheLoader loadTileCache;
 
   /// The downloaded regions (PLAN.md D26), if any.
   final RegionTileSource? regionTiles;
@@ -159,6 +196,8 @@ class OpenFreeMapLayer extends StatefulWidget {
 
 class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
   BaseMap? _map;
+  vt.TileProviders? _providers;
+  int _generation = 0;
   Object? _error;
   bool _loading = false;
 
@@ -178,6 +217,7 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
         loadStyle: widget.loadStyle,
         loadOfflineStyle: widget.loadOfflineStyle,
         loadWorldMap: widget.loadWorldMap,
+        loadTileCache: widget.loadTileCache,
         regions: widget.regionTiles,
       );
       if (!mounted) {
@@ -185,7 +225,10 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
         return;
       }
       final old = _map;
-      setState(() => _map = map);
+      setState(() {
+        _map = map;
+        _providers = _providersFor(map);
+      });
       old?.style.dispose();
     } catch (e) {
       // Keep showing what's there (e.g. the offline map) if a retry fails.
@@ -193,6 +236,23 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // Built once per map and generation: a new TileProviders object makes
+  // the layer reload every tile.
+  vt.TileProviders _providersFor(BaseMap map) =>
+      map.providers(generation: _generation, onRecovered: _onRecovered);
+
+  /// The network is back after stand-in tiles were shown: reload, so the
+  /// real tiles replace them.
+  void _onRecovered() {
+    if (!mounted) return;
+    final map = _map;
+    if (map == null) return;
+    setState(() {
+      _generation++;
+      _providers = _providersFor(map);
+    });
   }
 
   @override
@@ -205,13 +265,16 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
   @override
   Widget build(BuildContext context) {
     final map = _map;
-    if (map != null) {
+    final providers = _providers;
+    if (map != null && providers != null) {
       final layer = vt.VectorTileLayer(
         theme: map.style.theme,
-        tileProviders: map.providers,
+        tileProviders: providers,
         rasterSources: map.style.rasterSources,
         sprites: map.style.sprites,
         glyphs: map.style.glyphs,
+        // Only the shaded relief still goes through the package's disk
+        // cache; the vector tiles have the app's own (D27).
         diskCacheMaximumSizeInBytes: MapConfig.diskCacheBytes,
         diskCacheTtl: MapConfig.diskCacheTtl,
       );

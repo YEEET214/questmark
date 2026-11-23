@@ -14,7 +14,8 @@ import 'geocoding_service.dart';
 ///   single spaces), so "Oodi Helsinki" and "  oodi   helsinki " are one
 ///   question.
 /// * Reverse lookups are keyed by the point rounded to 5 decimals (about
-///   1 m).
+///   1 m); town names ([placeName]) by the point rounded to 2 (about
+///   1 km).
 /// * "No results" and "no address" are cached too: they're real answers.
 ///   Errors are not, so a failed lookup can be retried.
 /// * Entries older than [maxAge] are ignored (places and addresses do
@@ -44,6 +45,12 @@ class CachingGeocodingService implements GeocodingService {
       'reverse:${p.latitude.toStringAsFixed(5)},'
       '${p.longitude.toStringAsFixed(5)}';
 
+  /// Town names are asked for a point rounded to 2 decimals (about
+  /// 1 km), so that's the key too.
+  static String placeKey(GeoPoint p) =>
+      'place:${p.latitude.toStringAsFixed(2)},'
+      '${p.longitude.toStringAsFixed(2)}';
+
   @override
   Future<List<GeocodeResult>> search(String query) async {
     final key = searchKey(query);
@@ -71,6 +78,18 @@ class CachingGeocodingService implements GeocodingService {
     final label = await _inner.reverse(point);
     await _write(key, jsonEncode({'label': label}));
     return label;
+  }
+
+  @override
+  Future<String?> placeName(GeoPoint point) async {
+    final key = placeKey(point);
+    final cached = await _read(key);
+    if (cached != null) {
+      return (jsonDecode(cached) as Map<String, Object?>)['name'] as String?;
+    }
+    final name = await _inner.placeName(point);
+    await _write(key, jsonEncode({'name': name}));
+    return name;
   }
 
   Future<String?> _read(String key) async {

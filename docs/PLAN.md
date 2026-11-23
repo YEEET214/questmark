@@ -236,7 +236,7 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 * When a task is placed by pinning the map, reverse geocoding (coordinates
   → address) runs once, on save, and only when the task has no address yet.
 
-### D7. Offline maps: two levels (level 1 as built: D25)
+### D7. Offline maps: two levels (as built: D25, D26, D27)
 
 **Level 1: the low-detail world map, packaged with the app (R10).**
 * Zoom levels 0–5 of the whole world: 1 + 4 + 16 + 64 + 256 + 1024 =
@@ -885,6 +885,12 @@ Nominatim service to find addresses. Your own location is never sent."
 position is never sent, so the location card's "never leaves your phone"
 stays true for it.
 
+**Changed in Phase 8b (user decision, D26):** downloaded map areas are
+named with Nominatim, so for "my area" a rough position (rounded to about
+1 km) is sent. The note now ends "Your own location is only sent, rounded
+to about 1 km, to name a map area you download.", and the location card
+says the same.
+
 **Not done (possible later):** biasing results towards the visible map
 area (Nominatim's `viewbox`). It would make cache hits rarer, so it was
 left out for now; adding the town to the query works well.
@@ -953,6 +959,144 @@ path against its own databases folder, so the first zoom 0–4 run wrote
 the file under `.dart_tool/`. It was moved into place (no second
 download), and the builder now makes the path absolute, with a test.
 
+### D26. Region downloads as built (Phase 8b)
+Builds level 2 of D7 (R11). The user's choices: **sizes Small / Medium /
+Large**, **place names from Nominatim**, **the Offline maps button on the
+map**, and a **one-off tile-size sample** before the estimates were written.
+
+**Tile sizes measured** (23-11-2026; 96 tiles, 3.8 MB, 1 at a time,
+`QuestMark/1.0.0`), gzipped, averages:
+
+| Area | zoom 14 | zoom 12 | zoom 10 |
+|---|---|---|---|
+| Central London | 69 KB | 109 KB | 142 KB |
+| Dundee | 8 KB | 26 KB | 46 KB |
+| Rural Highlands | 2 KB | 2 KB | 23 KB |
+
+So a large area fits easily in the countryside, but in a big city 3,000
+detailed tiles would be ~200 MB, four times OpenFreeMap's 50 MB limit.
+
+**Sizes.** Counted in zoom-14 tiles across, so the 3,000-tile limit holds
+everywhere on Earth. In km the same square is wider near the equator.
+
+| Size | Tiles across | Width at Dundee | Tiles (zoom 5-14) |
+|---|---|---|---|
+| Small | 15 | ~20 km | ~350 |
+| Medium (default) | 29 | ~39 km | ~1,170 |
+| Large | 45 | ~61 km | ≤ ~2,860 (tested) |
+
+A region is that square at zoom 14, plus every zoom 5-13 tile overlapping
+it. Zoom 0-4 are left out (the bundled world map has them, D25).
+
+**Middle first, and the 50 MB limit.** Tiles are downloaded in rings from
+the centre outwards, every zoom of a ring before the next ring. The download
+stops just under 50 MB (counted over the whole region, resumes included).
+What's on the phone is then a smaller but complete square around the
+centre ("Ready offline: the middle 18 km. Stopped at OpenFreeMap's 50 MB
+limit"), which can't be resumed (that would be a second download of the
+same area). The estimate is a range, countryside to big city, e.g. "≈ 39 km
+across · 1,167 tiles · 3.7–50 MB".
+
+**Downloading** (`RegionDownloader`, `OpenFreeMapTileFetcher`):
+* the tile URL comes from OpenFreeMap's TileJSON (it changes weekly);
+  2 requests at a time, `QuestMark/1.0.0`; never tile.openstreetmap.org;
+* tiles are kept as downloaded (gzipped), and their size is the real
+  download size (no automatic unzipping);
+* 429 / 5xx and lost connections are retried after 2, 6 and 15 s; after
+  that, or for any other error, the download pauses with the reason
+  ("Paused: no connection");
+* **Pause / Resume / Delete** in Offline maps. Resume skips tiles the
+  region already has. A download running when the app is closed shows as
+  "Paused: the app was closed"; the app **never resumes by itself**.
+* One download at a time.
+
+**Storage** (`OfflineRegionStore`): its own SQLite file,
+`offline_maps.db`, apart from the quests: `tiles` (each tile once),
+`region_tiles` (which region has which tile), `regions` (name, centre,
+size, status, progress, bytes) and `settings`. A tile another region already
+has is shared instead of downloaded again; deleting a region removes only
+tiles no other region uses, then `VACUUM` gives the space back.
+
+**Drawing:** zoom 0-4 from the world map, zoom 5-14 from downloaded
+regions, everything else from OpenFreeMap and its cache (D7's order). With
+no connection and no cached style, the bundled offline style draws the
+regions too.
+
+**Offering the user's area.** A card at the top of the map, after a GPS fix
+and only when the user is outside every region (finished or not):
+"Download the map for your area?" with the size, the estimate, and
+**Download / Not now** (until restart) **/ Don't ask again** (a switch in
+Offline maps turns it back on). The location card comes first when both
+apply.
+
+**Offline maps screen** (download button with the map buttons): the
+regions with state, date, size and width; progress while downloading;
+Pause, Resume, Rename, Delete (Yes/No); total space used; "Download an
+area" opens a map with a square to frame the area, the size choice and the
+estimate.
+
+**Names and privacy (user decision).** A region is named after its town
+(Nominatim reverse lookup at town level, cached). The centre is **rounded
+to 2 decimals (~1 km)** before it is sent. For "my area" that is the user's
+rough position, so the privacy texts changed:
+* picker: "Searches and quest locations are sent to OpenStreetMap's
+  Nominatim service to find addresses. Your own location is only sent,
+  rounded to about 1 km, to name a map area you download."
+* location card: "QuestMark shows your position on the map while the app is
+  open. It stays on your phone, except a rough position (about 1 km) to name
+  a map area you download."
+* the download card and the area picker say where the name comes from.
+
+Until a name is found the region is "My area" or "Map area"; renaming it
+wins over a name that arrives later.
+
+**Known limit (fixed in D27):** the map package copied every tile it drew
+into its disk cache (100 MB cap), downloaded ones included.
+
+### D27. Offline: enlarged stand-in tiles, and the app's own tile cache (PR #13 review)
+**User report:** offline, outside downloaded areas, zooming past 4 made the
+map go white, with only a glimpse of the map while zooming. Expected: the
+low-detail map simply enlarged (water still blue, rough coastlines).
+
+**Why it happened:** the map package asks for each zoom level's own tiles.
+Offline they fail, and the package draws them empty. It only shows the
+enlarged parent tile *while* a tile is loading (the glimpse), never after a
+failure, and that can't be changed from outside the package.
+
+**Fix: stand-in tiles.** When a tile can't be had, the app makes one: it
+takes the nearest less detailed tile that is on the phone (a downloaded
+region's, a cached one, or the world map's zoom-4 tile), cuts out the part
+under the wanted tile and enlarges it (`overzoomMvt`, pure Dart, in a
+background isolate). Shapes are scaled, moved and clipped to the tile plus
+a small margin; names and classes are copied, so the style draws it as
+usual. Tested on the real bundled tiles.
+
+**Why the app now keeps its own tile cache** (`map_cache.db`, 100 MB, 30
+days): the package's disk cache would have saved a stand-in as the real
+tile for 30 days, so after reconnecting the user would still see the
+low-detail version. The package's cache isn't reachable from outside, so
+the vector tiles no longer go through it. This also fixes D26's known limit
+(downloaded tiles were being copied into that cache). The package cache now
+only holds the shaded-relief images and is lowered to 20 MB, so it clears
+out the tiles it held before.
+
+**Tile order now** (`LocalFirstTileProvider`):
+1. zoom 0-4: the world map;
+2. zoom 5-14: downloaded regions;
+3. the app's cache, if under 30 days old;
+4. OpenFreeMap; what arrives is cached;
+5. network failed: the cached copy even if old, else a stand-in, which is
+   **never cached**.
+
+When the network answers again after a stand-in was shown, the map reloads
+once (a new memory-cache key), so the real tiles replace the stand-ins.
+The bundled offline style (no style cached yet) uses the same order without
+the network.
+
+**Also from the review: deleting an area** can take a few seconds (SQLite
+deletes the tiles and then compacts the file). The area now shows
+"Deleting…" with a moving bar, and its menu is hidden, until it's gone.
+
 ---
 
 ## 4. Phases
@@ -973,9 +1117,9 @@ push branch → open PR → progress report → you review → merge PR into
 | **5. GPS** | ✅ Done (PR #9) | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ✅ Done (PR #10) | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
 | **7. Address search** | ✅ Done (PR #11) | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
-| **8a. Bundled world map** | 🚧 In progress | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
-| **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint) | — |
+| **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
+| **8b. Region download** | 🚧 In progress | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
+| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. The browse cache (`map_cache.db`, 100 MB, D27): size to revisit with the user's preference for caching little | — |
 
 ---
 

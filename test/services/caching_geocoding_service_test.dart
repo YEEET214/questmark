@@ -112,6 +112,32 @@ void main() {
     expect(CachingGeocodingService.searchKey(' '), isNull);
     expect(CachingGeocodingService.reverseKey(GeoPoint(60.1, -0.123456)),
         'reverse:60.10000,-0.12346');
+    expect(CachingGeocodingService.placeKey(GeoPoint(56.462, -2.971)),
+        'place:56.46,-2.97');
+  });
+
+  group('placeName (region names, PLAN.md D26)', () {
+    test('asked once per ~1 km; nearby points share the answer', () async {
+      network.places[GeoPoint(56.462, -2.971)] = 'Dundee';
+      expect(await service.placeName(GeoPoint(56.462, -2.971)), 'Dundee');
+      // 300 m away, same rounded key: answered from the cache.
+      expect(await service.placeName(GeoPoint(56.4641, -2.9690)), 'Dundee');
+      expect(network.placeCalls, hasLength(1));
+    });
+
+    test('"no name" is cached; errors are not', () async {
+      final sea = GeoPoint(57.5, 1.5);
+      expect(await service.placeName(sea), isNull);
+      expect(await service.placeName(sea), isNull);
+      expect(network.placeCalls, hasLength(1));
+
+      final other = GeoPoint(10, 10);
+      network.failNext = const GeocodingException(GeocodingFailure.offline);
+      await expectLater(
+          service.placeName(other), throwsA(isA<GeocodingException>()));
+      expect(await service.placeName(other), isNull);
+      expect(network.placeCalls, hasLength(3));
+    });
   });
 }
 

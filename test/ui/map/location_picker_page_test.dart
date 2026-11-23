@@ -248,7 +248,9 @@ void main() {
       final note = find.byKey(const Key('nominatimNote'));
       expect(note, findsOneWidget);
       expect(find.textContaining('Nominatim'), findsOneWidget);
-      expect(find.textContaining('Your own location is never sent.'),
+      expect(
+          find.textContaining('Your own location is only sent, rounded to '
+              'about 1 km, to name a map area you download.'),
           findsOneWidget);
       expect(tester.getRect(note).top,
           greaterThanOrEqualTo(tester

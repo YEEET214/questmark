@@ -12,7 +12,7 @@ abstract final class MapConfig {
   static const styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 
   /// The style source holding OpenFreeMap's vector tiles. The bundled
-  /// world map stands in for it at zoom 0-5 (PLAN.md D7).
+  /// world map stands in for it at zoom 0-4 (PLAN.md D7, D25).
   static const tileSourceId = 'openmaptiles';
 
   /// The offline copy of the style, bundled with the app (Phase 8a).
@@ -52,6 +52,12 @@ abstract final class MapConfig {
   /// The persistent tile cache. Tiles already seen are served from disk,
   /// so repeat views cost the server nothing. The OS doesn't clear this
   /// folder (it's in the app support directory).
-  static const diskCacheBytes = 100 * 1024 * 1024; // 100 MB
+  ///
+  /// Vector tiles go in the app's own cache ([tileCacheBytes], PLAN.md
+  /// D27); the package's disk cache ([diskCacheBytes]) now only holds the
+  /// shaded relief images, so it is small. Lowering it from 100 MB also
+  /// lets the package clear out the vector tiles it cached before.
+  static const tileCacheBytes = 100 * 1000 * 1000; // 100 MB
+  static const diskCacheBytes = 20 * 1024 * 1024; // 20 MB
   static const diskCacheTtl = Duration(days: 30);
 }

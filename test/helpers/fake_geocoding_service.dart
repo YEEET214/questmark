@@ -44,6 +44,17 @@ class FakeGeocodingService implements GeocodingService {
     return addresses[point];
   }
 
+  /// Answers for [placeName]; any other point has no name.
+  final places = <GeoPoint, String>{};
+  final placeCalls = <GeoPoint>[];
+
+  @override
+  Future<String?> placeName(GeoPoint point) async {
+    placeCalls.add(point);
+    _maybeFail();
+    return places[point];
+  }
+
   void _maybeFail() {
     final e = failNext;
     if (e != null) {

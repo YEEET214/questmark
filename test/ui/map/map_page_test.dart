@@ -3,10 +3,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:questmark/models/geo_point.dart';
+import 'package:questmark/models/offline_region.dart';
 import 'package:questmark/models/task.dart';
 import 'package:questmark/services/location_service.dart';
 import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/state/map_focus_controller.dart';
+import 'package:questmark/state/offline_maps_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
 import 'package:questmark/ui/map/map_attribution.dart';
 import 'package:questmark/ui/map/map_config.dart';
@@ -14,9 +16,12 @@ import 'package:questmark/ui/map/map_controls.dart';
 import 'package:questmark/ui/map/map_page.dart';
 import 'package:questmark/ui/map/quest_details_sheet.dart';
 import 'package:questmark/ui/map/quest_marker.dart';
+import 'package:questmark/ui/offline/offline_maps_page.dart';
+import 'package:questmark/ui/offline/region_prompt.dart';
 import 'package:questmark/ui/tasks/task_editor_page.dart';
 
 import '../../helpers/fake_location_service.dart';
+import '../../helpers/fake_offline_maps.dart';
 import '../../helpers/fake_task_repository.dart';
 
 void main() {
@@ -57,6 +62,7 @@ void main() {
     void Function()? before,
     FakeLocationService? gpsService,
     FakeLastLocationRepository? saved,
+    FakeOfflineMaps? offlineMaps,
   }) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);
@@ -75,6 +81,9 @@ void main() {
             create: (_) => TaskListController(repo, clock: () => now)..load()),
         ChangeNotifierProvider.value(value: focus),
         ChangeNotifierProvider(create: (_) => location..start()),
+        if (offlineMaps != null)
+          ChangeNotifierProvider<OfflineMapsController>.value(
+              value: offlineMaps),
       ],
       child: MaterialApp(
         home: MapPage(
@@ -671,6 +680,70 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(await repo.getAll(), hasLength(1));
+    });
+  });
+  group('offline maps (Phase 8b, D26)', () {
+    final prompt = find.byType(RegionPrompt);
+
+    testWidgets('without offline maps: no button and no prompt',
+        (tester) async {
+      await pumpMap(tester, []);
+      gps.emit(fixAt(56.462, -2.971));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('offlineMapsButton')), findsNothing);
+      expect(prompt, findsNothing);
+    });
+
+    testWidgets('the download button opens Offline maps', (tester) async {
+      final maps = FakeOfflineMaps();
+      await pumpMap(tester, [], offlineMaps: maps);
+      await tapByKey(tester, 'offlineMapsButton');
+      expect(find.byType(OfflineMapsPage), findsOneWidget);
+    });
+
+    testWidgets('the area is offered only once there is a GPS fix',
+        (tester) async {
+      final maps = FakeOfflineMaps();
+      await pumpMap(tester, [], offlineMaps: maps);
+      expect(prompt, findsNothing);
+      gps.emit(fixAt(56.462, -2.971));
+      await tester.pumpAndSettle();
+      expect(prompt, findsOneWidget);
+      expect(maps.downloads, isEmpty, reason: 'only after Download');
+    });
+
+    testWidgets('Download: the area around the user, with the chosen size',
+        (tester) async {
+      final maps = FakeOfflineMaps();
+      await pumpMap(tester, [], offlineMaps: maps);
+      gps.emit(fixAt(56.462, -2.971));
+      await tester.pumpAndSettle();
+      await tapByKey(tester, 'regionPromptDownload');
+
+      final d = maps.downloads.single;
+      expect(d.center, GeoPoint(56.462, -2.971));
+      expect(d.size, RegionSize.medium);
+      expect(d.myArea, isTrue);
+      expect(find.text('Downloading the map for your area.'), findsOneWidget);
+      expect(prompt, findsNothing, reason: 'hidden while downloading');
+    });
+
+    testWidgets('Not now hides it', (tester) async {
+      final maps = FakeOfflineMaps();
+      await pumpMap(tester, [], offlineMaps: maps);
+      gps.emit(fixAt(56.462, -2.971));
+      await tester.pumpAndSettle();
+      await tapByKey(tester, 'regionPromptNotNow');
+      expect(prompt, findsNothing);
+      expect(maps.notNowPressed, isTrue);
+    });
+
+    testWidgets('inside a downloaded region: not offered', (tester) async {
+      final maps = FakeOfflineMaps()..offer = false;
+      await pumpMap(tester, [], offlineMaps: maps);
+      gps.emit(fixAt(56.462, -2.971));
+      await tester.pumpAndSettle();
+      expect(prompt, findsNothing);
     });
   });
 }

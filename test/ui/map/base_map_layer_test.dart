@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:questmark/data/mbtiles_archive.dart';
+import 'package:questmark/data/offline_region_store.dart';
 import 'package:questmark/ui/map/base_map_layer.dart';
 import 'package:questmark/ui/map/world_map_tiles.dart';
 
@@ -39,7 +41,7 @@ vt.Style _style(String name) => vt.Style(
 /// loading fails.
 Future<MbTilesArchive?> noWorldMap() async => null;
 
-Future<vt.Style> noOfflineStyle(MbTilesArchive _) =>
+Future<vt.Style> noOfflineStyle(MbTilesArchive _, RegionTileSource? _) =>
     Future.error(StateError('no offline style expected'));
 
 void main() {
@@ -119,7 +121,7 @@ void main() {
         );
         expect(map.offline, isFalse);
         expect(map.style, same(online));
-        expect(map.providers['openmaptiles'], isA<WorldFirstTileProvider>());
+        expect(map.providers['openmaptiles'], isA<LocalFirstTileProvider>());
       });
 
       test('online without a world map: the style as it is', () async {
@@ -137,7 +139,7 @@ void main() {
         MbTilesArchive? usedWorld;
         final map = await loadBaseMap(
           loadStyle: () async => throw Exception('offline'),
-          loadOfflineStyle: (w) async {
+          loadOfflineStyle: (w, _) async {
             usedWorld = w;
             return offline;
           },
@@ -159,6 +161,31 @@ void main() {
         expect(map.providers, same(online.providers));
       });
 
+      test('downloaded regions are passed on, online and offline (D26)',
+          () async {
+        final regions = _NoRegionTiles();
+        final online = await loadBaseMap(
+          loadStyle: () async => _style('online'),
+          loadOfflineStyle: noOfflineStyle,
+          loadWorldMap: noWorldMap,
+          regions: regions,
+        );
+        expect(
+            online.providers['openmaptiles'], isA<LocalFirstTileProvider>());
+
+        RegionTileSource? usedRegions;
+        await loadBaseMap(
+          loadStyle: () async => throw Exception('offline'),
+          loadOfflineStyle: (_, r) async {
+            usedRegions = r;
+            return _style('offline');
+          },
+          loadWorldMap: () async => world,
+          regions: regions,
+        );
+        expect(usedRegions, same(regions));
+      });
+
       test('nothing works: the online error is passed on', () async {
         await expectLater(
           loadBaseMap(
@@ -177,7 +204,7 @@ void main() {
         tester,
         () async => throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_) async => _style('offline'),
+        loadOfflineStyle: (_, _) async => _style('offline'),
       );
       await tester.pumpAndSettle();
 
@@ -194,7 +221,7 @@ void main() {
         tester,
         () async => online ? _style('online') : throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_) async => _style('offline'),
+        loadOfflineStyle: (_, _) async => _style('offline'),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('mapOfflineBanner')), findsOneWidget);
@@ -212,7 +239,7 @@ void main() {
         tester,
         () async => throw Exception('offline'),
         loadWorldMap: () async => world,
-        loadOfflineStyle: (_) async => _style('offline'),
+        loadOfflineStyle: (_, _) async => _style('offline'),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Retry'));
@@ -221,4 +248,12 @@ void main() {
       expect(find.byType(MapLoadErrorBanner), findsNothing);
     });
   });
+}
+
+class _NoRegionTiles implements RegionTileSource {
+  @override
+  Future<Uint8List?> tile(int z, int x, int y) async => null;
+
+  @override
+  Future<bool> hasTiles() async => false;
 }

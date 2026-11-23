@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'data/last_location_repository.dart';
+import 'data/offline_region_store.dart';
 import 'data/task_repository.dart';
 import 'services/geocoding_service.dart';
 import 'services/location_service.dart';
 import 'state/location_controller.dart';
 import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
+import 'state/offline_maps_controller.dart';
 import 'state/task_list_controller.dart';
 import 'state/task_list_view_controller.dart';
 import 'ui/home_shell.dart';
@@ -27,7 +29,9 @@ class QuestMarkApp extends StatelessWidget {
     required this.lastLocationRepository,
     required this.geocodingService,
     this.navigationController,
-    this.mapBaseLayer = const OpenFreeMapLayer(),
+    this.offlineMaps,
+    this.regionTiles,
+    this._mapBaseLayer,
   });
 
   final TaskRepository taskRepository;
@@ -45,12 +49,23 @@ class QuestMarkApp extends StatelessWidget {
   /// Optional pre-built controller, mainly for tests.
   final NavigationController? navigationController;
 
+  /// Downloaded map regions (PLAN.md D26): the Offline maps screen and
+  /// the "download your area?" card. Left out (null) in most tests, which
+  /// then have no offline-maps buttons.
+  final OfflineMapsController? offlineMaps;
+
+  /// The downloaded tiles, for the map to draw from.
+  final RegionTileSource? regionTiles;
+
   /// The map's base layer. Tests pass an empty widget so no map tiles are
   /// loaded from the network.
-  final Widget mapBaseLayer;
+  final Widget? _mapBaseLayer;
 
   @override
   Widget build(BuildContext context) {
+    final mapBaseLayer =
+        _mapBaseLayer ?? OpenFreeMapLayer(regionTiles: regionTiles);
+    final offlineMaps = this.offlineMaps;
     return MultiProvider(
       providers: [
         // The base map for pages pushed on top of the shell (the location
@@ -71,6 +86,9 @@ class QuestMarkApp extends StatelessWidget {
               TaskListController(taskRepository, geocoder: geocodingService)
                 ..load(),
         ),
+        if (offlineMaps != null)
+          ChangeNotifierProvider<OfflineMapsController>.value(
+              value: offlineMaps),
         ChangeNotifierProvider<LocationController>(
           create: (_) =>
               LocationController(locationService, lastLocationRepository)

@@ -3,6 +3,7 @@ import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
 import 'package:sqflite/sqflite.dart' show getDatabasesPath;
 
 import '../../data/mbtiles_archive.dart';
+import '../../data/offline_region_store.dart';
 import '../../data/world_map_installer.dart';
 import 'map_config.dart';
 import 'world_map_tiles.dart';
@@ -11,8 +12,10 @@ import 'world_map_tiles.dart';
 /// references).
 typedef StyleLoader = Future<vt.Style> Function();
 
-/// Loads the bundled offline style, drawing from [world].
-typedef OfflineStyleLoader = Future<vt.Style> Function(MbTilesArchive world);
+/// Loads the bundled offline style, drawing from [world] and the
+/// downloaded [regions].
+typedef OfflineStyleLoader = Future<vt.Style> Function(
+    MbTilesArchive world, RegionTileSource? regions);
 
 /// Opens the bundled world map, or returns `null` if there is none.
 typedef WorldMapLoader = Future<MbTilesArchive?> Function();
@@ -40,13 +43,22 @@ Future<vt.Style> loadOpenFreeMapStyle() => vt.StyleReader(
 /// (`tool/build_world_map.dart` writes it): OpenFreeMap's look, but with
 /// every tile from the world map file and nothing fetched from the
 /// network (no icons, and the phone's own fonts for labels).
-Future<vt.Style> loadOfflineWorldStyle(MbTilesArchive world) =>
-    vt.StyleReader(
-      uri: 'asset://${MapConfig.offlineStyleAsset}',
-      cache: false,
-      resolveProvider: (id) async =>
-          id == MapConfig.tileSourceId ? WorldMapTileProvider(world) : null,
-    ).read();
+///
+/// With downloaded regions, their detailed tiles are drawn too (zoom
+/// 5-14); without, the zoom-4 world map is enlarged at closer zooms.
+Future<vt.Style> loadOfflineWorldStyle(
+    MbTilesArchive world, RegionTileSource? regions) async {
+  final withRegions = regions != null && await regions.hasTiles();
+  return vt.StyleReader(
+    uri: 'asset://${MapConfig.offlineStyleAsset}',
+    cache: false,
+    resolveProvider: (id) async => id != MapConfig.tileSourceId
+        ? null
+        : withRegions
+            ? OfflineTileProvider(world, regions)
+            : WorldMapTileProvider(world),
+  ).read();
+}
 
 Future<MbTilesArchive?>? _bundledWorld;
 
@@ -73,7 +85,7 @@ class BaseMap {
   final vt.Style style;
 
   /// The tile providers to draw with: the style's own, with the world map
-  /// in front for zoom 0-5 when it's available.
+  /// (zoom 0-4) and the downloaded regions (zoom 5-14) in front.
   final vt.TileProviders providers;
 
   /// True when the online style couldn't be loaded and the bundled
@@ -83,7 +95,8 @@ class BaseMap {
 
 /// Loads the base map in this order (PLAN.md D7):
 /// 1. the online OpenFreeMap style (from its disk cache when offline),
-///    with the bundled world map serving zoom 0-5;
+///    with the bundled world map serving zoom 0-4 and the downloaded
+///    regions zoom 5-14;
 /// 2. if that fails (e.g. the very first launch without a connection):
 ///    the bundled offline style on the world map alone;
 /// 3. if there's no world map either, the error from step 1 is thrown.
@@ -91,6 +104,7 @@ Future<BaseMap> loadBaseMap({
   required StyleLoader loadStyle,
   required OfflineStyleLoader loadOfflineStyle,
   required WorldMapLoader loadWorldMap,
+  RegionTileSource? regions,
 }) async {
   MbTilesArchive? world;
   try {
@@ -102,12 +116,12 @@ Future<BaseMap> loadBaseMap({
     final style = await loadStyle();
     return BaseMap(
       style,
-      world == null ? style.providers : withWorldMap(style.providers, world),
+      withLocalMaps(style.providers, world: world, regions: regions),
       offline: false,
     );
   } catch (_) {
     if (world == null) rethrow;
-    final style = await loadOfflineStyle(world);
+    final style = await loadOfflineStyle(world, regions);
     return BaseMap(style, style.providers, offline: true);
   }
 }
@@ -116,8 +130,9 @@ Future<BaseMap> loadBaseMap({
 /// vector tiles. It goes first in `FlutterMap.children`, under the quest
 /// markers.
 ///
-/// Zoom 0-5 always come from the world map bundled with the app, so the
-/// whole world shows even with no connection. Closer zooms come from
+/// Zoom 0-4 always come from the world map bundled with the app, so the
+/// whole world shows even with no connection. Closer zooms come from the
+/// downloaded regions ([regionTiles]) where there are any, else from
 /// OpenFreeMap (and its disk cache). If the online style can't be loaded
 /// at all, the bundled offline style is shown with a small "offline"
 /// banner and Retry. Only if that fails too is the error banner shown.
@@ -127,12 +142,16 @@ class OpenFreeMapLayer extends StatefulWidget {
     this.loadStyle = loadOpenFreeMapStyle,
     this.loadOfflineStyle = loadOfflineWorldStyle,
     this.loadWorldMap = openBundledWorldMap,
+    this.regionTiles,
   });
 
   /// Injectable so tests never touch the network or the assets.
   final StyleLoader loadStyle;
   final OfflineStyleLoader loadOfflineStyle;
   final WorldMapLoader loadWorldMap;
+
+  /// The downloaded regions (PLAN.md D26), if any.
+  final RegionTileSource? regionTiles;
 
   @override
   State<OpenFreeMapLayer> createState() => _OpenFreeMapLayerState();
@@ -159,6 +178,7 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
         loadStyle: widget.loadStyle,
         loadOfflineStyle: widget.loadOfflineStyle,
         loadWorldMap: widget.loadWorldMap,
+        regions: widget.regionTiles,
       );
       if (!mounted) {
         map.style.dispose();

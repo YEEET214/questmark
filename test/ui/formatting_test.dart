@@ -31,4 +31,26 @@ void main() {
       expect(formatCoordinates(GeoPoint(-33.86, -70.5)), '-33.86000, -70.50000');
     });
   });
+  group('offline map numbers (Phase 8b)', () {
+    test('formatCount: thousands separators', () {
+      expect(formatCount(0), '0');
+      expect(formatCount(999), '999');
+      expect(formatCount(1180), '1,180');
+      expect(formatCount(1234567), '1,234,567');
+      expect(formatCount(-2500), '-2,500');
+    });
+
+    test('formatMegabytes: one decimal below 10 MB, whole above', () {
+      expect(formatMegabytes(0), '0.0 MB');
+      expect(formatMegabytes(20000), '0.1 MB', reason: 'never "0.0" for data');
+      expect(formatMegabytes(3700000), '3.7 MB');
+      expect(formatMegabytes(12300000), '12 MB');
+      expect(formatMegabytes(50000000), '50 MB');
+    });
+
+    test('formatKm', () {
+      expect(formatKm(9.46), '9.5 km');
+      expect(formatKm(39.2), '39 km');
+    });
+  });
 }

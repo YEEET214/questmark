@@ -398,15 +398,17 @@ class _LocationPickerPageState extends State<LocationPickerPage>
                       ),
               ),
             ),
-            // Be open about what leaves the phone (user decision, PR #11
-            // review): search text, and the location of quests that need
-            // an address. The GPS position is never sent.
+            // Be open about what leaves the phone (user decisions, PR #11
+            // review and Phase 8b): search text, the location of quests
+            // that need an address, and, only to name a downloaded map
+            // area, a rough position (PLAN.md D26).
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 'Searches and quest locations are sent to OpenStreetMap\'s '
                 'Nominatim service to find addresses. Your own location is '
-                'never sent.',
+                'only sent, rounded to about 1 km, to name a map area you '
+                'download.',
                 key: const Key('nominatimNote'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,

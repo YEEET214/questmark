@@ -12,7 +12,7 @@ abstract final class MapConfig {
   static const styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 
   /// The style source holding OpenFreeMap's vector tiles. The bundled
-  /// world map stands in for it at zoom 0-5 (PLAN.md D7).
+  /// world map stands in for it at zoom 0-4 (PLAN.md D7, D25).
   static const tileSourceId = 'openmaptiles';
 
   /// The offline copy of the style, bundled with the app (Phase 8a).

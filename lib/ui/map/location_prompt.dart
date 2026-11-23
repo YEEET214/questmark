@@ -44,8 +44,9 @@ class LocationPrompt extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 36, right: 8),
               child: Text(
-                'QuestMark shows your position on the map. It is only used '
-                'while the app is open and never leaves your phone.',
+                'QuestMark shows your position on the map while the app is '
+                'open. It stays on your phone, except a rough position '
+                '(about 1 km) to name a map area you download.',
                 style: theme.textTheme.bodySmall,
               ),
             ),

@@ -5,11 +5,16 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/geo_point.dart';
 import '../../models/location_fix.dart';
+import '../../models/offline_region.dart';
 import '../../models/task.dart';
 import '../../state/location_controller.dart';
 import '../../state/map_focus_controller.dart';
+import '../../state/offline_maps_controller.dart';
 import '../../state/task_list_controller.dart';
+import '../offline/offline_maps_page.dart';
+import '../offline/region_prompt.dart';
 import '../tasks/task_actions.dart';
 import 'base_map_layer.dart';
 import 'camera_animator.dart';
@@ -40,6 +45,11 @@ import 'quest_marker.dart';
 /// D19): a blue dot with an accuracy circle, a my-location button that
 /// centres on the user and then follows them until they drag the map, and
 /// a [LocationPrompt] that explains before the OS permission dialog.
+///
+/// Offline maps (PLAN.md D26), when the app provides an
+/// [OfflineMapsController]: a download button with the map buttons, and a
+/// [RegionPrompt] offering the user's area when they're outside every
+/// downloaded region.
 class MapPage extends StatelessWidget {
   const MapPage({
     super.key,
@@ -329,9 +339,34 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
     _animateTo(camera.center, camera.zoom + delta);
   }
 
+  void _openOfflineMaps() => OfflineMapsPage.open(context,
+      center: _map.camera.center.toPickedGeoPoint());
+
+  Future<void> _downloadMyArea(GeoPoint center, RegionSize size) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await context
+          .read<OfflineMapsController>()
+          .download(center, size, myArea: true);
+    } on StateError {
+      return; // already downloading: the prompt is hidden then anyway
+    }
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: const Text('Downloading the map for your area.'),
+        action: SnackBarAction(label: 'Details', onPressed: _openOfflineMaps),
+      ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final zoom = _zoom;
+    // Only these two, so download progress doesn't rebuild the map.
+    final hasOfflineMaps =
+        context.select<OfflineMapsController?, bool>((c) => c != null);
+    final downloading = context.select<OfflineMapsController?, bool>(
+        (c) => c?.isDownloading ?? false);
     final canZoomIn = zoom == null || zoom < MapConfig.maxZoom - 0.01;
     final canZoomOut = zoom == null || zoom > MapConfig.minZoom + 0.01;
     final fix = _location.current;
@@ -374,8 +409,20 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
                 setState(() => _showCompleted = !_showCompleted),
             onZoomIn: canZoomIn ? () => _zoomBy(1) : null,
             onZoomOut: canZoomOut ? () => _zoomBy(-1) : null,
+            onOfflineMaps: hasOfflineMaps ? _openOfflineMaps : null,
+            downloading: downloading,
           ),
         ),
+        if (hasOfflineMaps && fix != null && !showPrompt)
+          Positioned(
+            left: 8,
+            right: 8,
+            top: 8,
+            child: _RegionOffer(
+              center: fix.point,
+              onDownload: (size) => _downloadMyArea(fix.point, size),
+            ),
+          ),
         if (showPrompt)
           Positioned(
             left: 8,
@@ -439,6 +486,29 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
           openTaskEditor(context, task);
         },
       ),
+    );
+  }
+}
+
+/// The [RegionPrompt], when [OfflineMapsController.shouldOfferFor] says
+/// so. Its own widget, so only it rebuilds on controller changes.
+class _RegionOffer extends StatelessWidget {
+  const _RegionOffer({required this.center, required this.onDownload});
+
+  final GeoPoint center;
+  final ValueChanged<RegionSize> onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final offer = context.select<OfflineMapsController, bool>(
+        (c) => c.shouldOfferFor(center));
+    if (!offer) return const SizedBox.shrink();
+    final c = context.read<OfflineMapsController>();
+    return RegionPrompt(
+      center: center,
+      onDownload: onDownload,
+      onNotNow: c.notNow,
+      onNever: () => c.setOfferMyArea(false),
     );
   }
 }

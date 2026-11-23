@@ -15,7 +15,9 @@ void main() {
     ));
 
     expect(find.text('See where you are among your quests'), findsOneWidget);
-    expect(find.textContaining('never leaves your phone'), findsOneWidget);
+    expect(find.textContaining('It stays on your phone, except a rough '
+            'position (about 1 km) to name a map area you download.'),
+        findsOneWidget);
 
     await tester.tap(find.text('Not now'));
     await tester.tap(find.text('Allow'));

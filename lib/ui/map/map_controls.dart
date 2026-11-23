@@ -18,7 +18,8 @@ enum MyLocationButtonState {
 ///
 /// * a my-location button: centre on the user and follow them (D8);
 /// * a toggle that shows or hides completed quests (PLAN.md D17);
-/// * a "+ / −" zoom pair.
+/// * a "+ / −" zoom pair;
+/// * the Offline maps button (PLAN.md D26), on the world map only.
 ///
 /// It's purely presentational: the map page owns the state and passes in
 /// callbacks. A callback of `null` disables that button (e.g. "+" at the
@@ -32,6 +33,8 @@ class MapControls extends StatelessWidget {
     required this.onZoomOut,
     required this.myLocation,
     required this.onMyLocation,
+    this.onOfflineMaps,
+    this.downloading = false,
   });
 
   final MyLocationButtonState myLocation;
@@ -43,6 +46,12 @@ class MapControls extends StatelessWidget {
   final VoidCallback? onToggleCompleted;
   final VoidCallback? onZoomIn;
   final VoidCallback? onZoomOut;
+
+  /// Opens Offline maps. Left out when null (the location picker).
+  final VoidCallback? onOfflineMaps;
+
+  /// A region download is running: the button shows it.
+  final bool downloading;
 
   /// Width and height of each button. Small, so the map stays visible.
   static const double buttonSize = 40;
@@ -80,6 +89,21 @@ class MapControls extends StatelessWidget {
                   : Icons.check_circle_outline,
               selected: showCompleted,
               onPressed: onToggleCompleted,
+            ),
+          ),
+        ],
+        if (onOfflineMaps != null) ...[
+          const SizedBox(height: 8),
+          _Panel(
+            child: _ControlButton(
+              key: const Key('offlineMapsButton'),
+              tooltip:
+                  downloading ? 'Offline maps (downloading)' : 'Offline maps',
+              icon: downloading
+                  ? Icons.downloading
+                  : Icons.download_for_offline_outlined,
+              selected: downloading,
+              onPressed: onOfflineMaps,
             ),
           ),
         ],

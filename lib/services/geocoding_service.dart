@@ -22,6 +22,11 @@ abstract interface class GeocodingService {
   /// A short address for [point], or `null` if there is none (e.g. the
   /// open sea). Throws [GeocodingException].
   Future<String?> reverse(GeoPoint point);
+
+  /// The name of the town or area around [point] (e.g. "Dundee"), or
+  /// `null` if there is none. Names downloaded map regions (PLAN.md D26).
+  /// Throws [GeocodingException].
+  Future<String?> placeName(GeoPoint point);
 }
 
 enum GeocodingFailure {
@@ -142,6 +147,55 @@ class NominatimGeocoder implements GeocodingService {
     } catch (e) {
       throw GeocodingException(GeocodingFailure.badResponse, '$e');
     }
+  }
+
+  /// Rounds [point] to 2 decimals (about 1 km) before sending it: a town
+  /// name doesn't need more, and for "my area" it is the user's own
+  /// position.
+  @override
+  Future<String?> placeName(GeoPoint point) async {
+    final body = await _get('/reverse', {
+      'lat': point.latitude.toStringAsFixed(2),
+      'lon': point.longitude.toStringAsFixed(2),
+      'format': 'jsonv2',
+      'addressdetails': '1',
+      // Town / city level.
+      'zoom': '10',
+    });
+    try {
+      final json = jsonDecode(body) as Map<String, Object?>;
+      if (json.containsKey('error')) return null;
+      return townName(json);
+    } catch (e) {
+      throw GeocodingException(GeocodingFailure.badResponse, '$e');
+    }
+  }
+
+  /// The town (or the nearest larger area) of a Nominatim result, e.g.
+  /// "Dundee"; falls back to the result's name, then to the first part of
+  /// its full name.
+  static String? townName(Map<String, Object?> item) {
+    final address = item['address'];
+    if (address is Map<String, Object?>) {
+      for (final k in const [
+        'city',
+        'town',
+        'village',
+        'municipality',
+        'hamlet',
+        'county',
+        'state_district',
+        'state',
+        'country',
+      ]) {
+        final v = address[k];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+    }
+    final name = (item['name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final full = (item['display_name'] as String?)?.split(',').first.trim();
+    return full == null || full.isEmpty ? null : full;
   }
 
   Future<String> _get(String path, Map<String, String> params) {

@@ -106,6 +106,54 @@ void main() {
     });
   });
 
+  group('placeName (region names, PLAN.md D26)', () {
+    test('asks at town level, with the point rounded to about 1 km',
+        () async {
+      late http.Request sent;
+      final name = await geocoder((r) async {
+        sent = r;
+        return utf8Json(jsonEncode({
+          'name': 'Dundee City',
+          'display_name': 'Dundee City, Scotland, United Kingdom',
+          'address': {'city': 'Dundee', 'state': 'Scotland'},
+        }));
+      }).placeName(GeoPoint(56.46213, -2.97089));
+
+      expect(sent.url.path, '/reverse');
+      expect(sent.url.queryParameters['lat'], '56.46');
+      expect(sent.url.queryParameters['lon'], '-2.97');
+      expect(sent.url.queryParameters['zoom'], '10');
+      expect(sent.headers['User-Agent'], AppInfo.userAgent);
+      expect(name, 'Dundee');
+    });
+
+    test('nothing there (e.g. at sea): no name', () async {
+      expect(
+          await geocoder((_) async => utf8Json('{"error": "Unable to geocode"}'))
+              .placeName(GeoPoint(0, 0)),
+          isNull);
+    });
+
+    test('townName: the town, else a larger area, else the name', () {
+      expect(
+          NominatimGeocoder.townName({
+            'address': {'village': 'Kirkton', 'county': 'Angus'},
+          }),
+          'Kirkton');
+      expect(
+          NominatimGeocoder.townName({
+            'address': {'county': 'Highland', 'country': 'United Kingdom'},
+          }),
+          'Highland');
+      expect(NominatimGeocoder.townName({'name': 'Rockall'}), 'Rockall');
+      expect(
+          NominatimGeocoder.townName(
+              {'display_name': 'Somewhere, Ocean'}),
+          'Somewhere');
+      expect(NominatimGeocoder.townName({}), isNull);
+    });
+  });
+
   group('errors', () {
     Future<GeocodingFailure> failureOf(
         Future<http.Response> Function(http.Request) handler) async {

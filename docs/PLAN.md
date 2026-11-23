@@ -236,7 +236,7 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 * When a task is placed by pinning the map, reverse geocoding (coordinates
   → address) runs once, on save, and only when the task has no address yet.
 
-### D7. Offline maps: two levels (as built: D25, D26)
+### D7. Offline maps: two levels (as built: D25, D26, D27)
 
 **Level 1: the low-detail world map, packaged with the app (R10).**
 * Zoom levels 0–5 of the whole world: 1 + 4 + 16 + 64 + 256 + 1024 =
@@ -1050,9 +1050,52 @@ rough position, so the privacy texts changed:
 Until a name is found the region is "My area" or "Map area"; renaming it
 wins over a name that arrives later.
 
-**Known limit:** the map package copies every tile it draws into its disk
-cache (100 MB cap), downloaded ones included, so a region the user browses
-also partly sits in that cache. To revisit with the cache size in Phase 9.
+**Known limit (fixed in D27):** the map package copied every tile it drew
+into its disk cache (100 MB cap), downloaded ones included.
+
+### D27. Offline: enlarged stand-in tiles, and the app's own tile cache (PR #13 review)
+**User report:** offline, outside downloaded areas, zooming past 4 made the
+map go white, with only a glimpse of the map while zooming. Expected: the
+low-detail map simply enlarged (water still blue, rough coastlines).
+
+**Why it happened:** the map package asks for each zoom level's own tiles.
+Offline they fail, and the package draws them empty. It only shows the
+enlarged parent tile *while* a tile is loading (the glimpse), never after a
+failure, and that can't be changed from outside the package.
+
+**Fix: stand-in tiles.** When a tile can't be had, the app makes one: it
+takes the nearest less detailed tile that is on the phone (a downloaded
+region's, a cached one, or the world map's zoom-4 tile), cuts out the part
+under the wanted tile and enlarges it (`overzoomMvt`, pure Dart, in a
+background isolate). Shapes are scaled, moved and clipped to the tile plus
+a small margin; names and classes are copied, so the style draws it as
+usual. Tested on the real bundled tiles.
+
+**Why the app now keeps its own tile cache** (`map_cache.db`, 100 MB, 30
+days): the package's disk cache would have saved a stand-in as the real
+tile for 30 days, so after reconnecting the user would still see the
+low-detail version. The package's cache isn't reachable from outside, so
+the vector tiles no longer go through it. This also fixes D26's known limit
+(downloaded tiles were being copied into that cache). The package cache now
+only holds the shaded-relief images and is lowered to 20 MB, so it clears
+out the tiles it held before.
+
+**Tile order now** (`LocalFirstTileProvider`):
+1. zoom 0-4: the world map;
+2. zoom 5-14: downloaded regions;
+3. the app's cache, if under 30 days old;
+4. OpenFreeMap; what arrives is cached;
+5. network failed: the cached copy even if old, else a stand-in, which is
+   **never cached**.
+
+When the network answers again after a stand-in was shown, the map reloads
+once (a new memory-cache key), so the real tiles replace the stand-ins.
+The bundled offline style (no style cached yet) uses the same order without
+the network.
+
+**Also from the review: deleting an area** can take a few seconds (SQLite
+deletes the tiles and then compacts the file). The area now shows
+"Deleting…" with a moving bar, and its menu is hidden, until it's gone.
 
 ---
 
@@ -1076,7 +1119,7 @@ push branch → open PR → progress report → you review → merge PR into
 | **7. Address search** | ✅ Done (PR #11) | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | 🚧 In progress | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. Downloaded region tiles also being copied into the disk cache (D26) | — |
+| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. The browse cache (`map_cache.db`, 100 MB, D27): size to revisit with the user's preference for caching little | — |
 
 ---
 

@@ -236,7 +236,7 @@ autocomplete (search-as-you-type), and requires a User-Agent. Our design:
 * When a task is placed by pinning the map, reverse geocoding (coordinates
   → address) runs once, on save, and only when the task has no address yet.
 
-### D7. Offline maps: two levels
+### D7. Offline maps: two levels (level 1 as built: D25)
 
 **Level 1: the low-detail world map, packaged with the app (R10).**
 * Zoom levels 0–5 of the whole world: 1 + 4 + 16 + 64 + 256 + 1024 =
@@ -889,6 +889,70 @@ stays true for it.
 area (Nominatim's `viewbox`). It would make cache hits rarer, so it was
 left out for now; adding the town to the query works well.
 
+### D25. The bundled world map as built (Phase 8a)
+Builds level 1 of D7.
+
+**Size check (D7's open question), and the user's decision:**
+* **Zoom 0–5 is too big:** the builder hit OpenFreeMap's 50 MB
+  per-download cap after 1,154 of the 1,365 tiles and stopped (nothing was
+  written). Low-zoom tiles are large, about 160 KB each even gzipped,
+  because each one covers a huge area.
+* **Zoom 0–4 ships:** 341 tiles, **28.7 MB** (zoom 2–3: 16 MB, zoom 4:
+  13 MB). The user chose it over zoom 0–3 (~14 MB, continents and
+  countries only), accepting that it's a little over the ~25 MB goal.
+* **Cost on the phone:** about +28.5 MB of app download (the tiles are
+  already compressed), plus a 28.7 MB copy in app storage, because SQLite
+  can only open real files. About 57 MB in total. To revisit in Phase 9
+  if it matters (e.g. drop the zoom-4 tiles of open ocean).
+
+**The builder** (`tool/build_world_map.dart`, run once on a PC; unit
+tested against a fake server):
+* reads the Liberty style and its TileJSON, then downloads every tile of
+  zoom 0..N, 2 at a time, with `QuestMark/1.0.0`;
+* checks the tile count (≤ 3,000) *before* downloading, and stops at
+  50 MB; any failure stops all requests and writes nothing;
+* retries 429 / 5xx with a growing delay; 404 means "no tile here";
+* writes `assets/map/world.mbtiles` (tiles gzipped, TMS rows),
+  `world.json` (version, size) and `offline_style.json`.
+
+**The offline style:** Liberty, cut down to what works with no network:
+only the OpenFreeMap vector source (served from the file), no shaded
+relief (a separate raster source), no `sprite` (icons) and no `glyphs`
+(map fonts). Labels then use the phone's own fonts. At zoom 0–4 the
+difference is small.
+
+**In the app:**
+* **First launch:** the map is copied from the assets into app storage
+  (`world_map_<version>.mbtiles`, next to the database), written to a
+  temporary name and renamed when complete. Later launches reuse it. An
+  app update with a new map replaces it and deletes the old one.
+* **Online (normal):** zoom 0–4 come from the file, **with no network
+  requests at all**; closer zooms come from OpenFreeMap and its disk
+  cache, as before. If the file lacks a low-zoom tile, the network is
+  asked instead.
+* **Never online yet (no cached style):** the bundled offline style is
+  drawn from the file alone, so the whole world shows even on the very
+  first launch without a connection. Zooming in enlarges the zoom-4
+  tiles. A small "Offline world map · Retry" banner sits at the bottom;
+  Retry switches to the online map once the connection is back, and a
+  failed retry keeps the offline map on screen.
+* Only if there's neither a connection nor a world map is the old "Couldn't
+  load the map" banner shown.
+* The vector-tile package is now used in two files:
+  `lib/ui/map/base_map_layer.dart` and `lib/ui/map/world_map_tiles.dart`
+  (CLAUDE.md updated). Reading the MBTiles file (`MbTilesArchive`) and
+  copying it (`WorldMapInstaller`) live in `lib/data`.
+
+**For Phase 8b:** with the world map ending at zoom 4, downloaded regions
+should cover zoom **5**–14 (not 6–14 as first planned in D7), so offline
+there's no zoom level that nothing covers. The tile-count maths changes
+slightly.
+
+**A bug found while running the builder:** `sqflite` resolves a relative
+path against its own databases folder, so the first zoom 0–4 run wrote
+the file under `.dart_tool/`. It was moved into place (no second
+download), and the builder now makes the path absolute, with a test.
+
 ---
 
 ## 4. Phases
@@ -908,8 +972,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **4c. Recycle bin** | ✅ Done (PR #8) | `feature/04c-recycle-bin` | Deleting moves a task to a recycle bin for 30 days (restore or delete permanently); automatic purge after 30 days; "Delete all completed tasks" with a Yes/No confirmation (D18); `deleted_at` column (schema v3) | soft delete/restore, purge at 30 days, migration v2→v3, bin screen, confirmation Yes/No paths |
 | **5. GPS** | ✅ Done (PR #9) | `feature/05-gps` | Location service, permission flow, player marker, re-centre / follow. **Map starts centred on the user** (D19): GPS → last known location → fit the quests | fake location stream moves the marker, permission-denied state, start-up view fallback order, saved last location |
 | **6. Pin on map** | ✅ Done (PR #10) | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
-| **7. Address search** | 🚧 In progress | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
-| **8a. Bundled world map** | ⬜ Planned | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
+| **7. Address search** | ✅ Done (PR #11) | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
+| **8a. Bundled world map** | 🚧 In progress | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ⬜ Planned | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
 | **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint) | — |
 

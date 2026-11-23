@@ -67,6 +67,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The low-detail world map bundled with the app (PLAN.md D7), built by
+  # tool/build_world_map.dart: world.mbtiles, world.json, offline_style.json.
+  assets:
+    - assets/map/
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

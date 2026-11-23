@@ -43,9 +43,9 @@ Layering: **UI → state (`ChangeNotifier` via `provider`) → repositories/serv
 
 - `lib/models`, `lib/data` (sqflite helper + versioned migrations + repositories), `lib/services`, `lib/state`, `lib/ui/{tasks,map,offline}`.
 - SQLite tests use `sqflite_common_ffi` with an in-memory database, so they run under plain `flutter test` without an emulator.
-- Map: `flutter_map` 8.3.2 + `flutter_map_vector_tiles` 2.11.0 (exact pins; package use confined to `lib/ui/map/base_map_layer.dart`), drawing **OpenFreeMap vector tiles** (OSM data). Markers are Flutter widgets. List → map navigation goes through a shared `MapFocusController`, not direct widget access.
+- Map: `flutter_map` 8.3.2 + `flutter_map_vector_tiles` 2.11.0 (exact pins; package use confined to `lib/ui/map/base_map_layer.dart` and `lib/ui/map/world_map_tiles.dart`), drawing **OpenFreeMap vector tiles** (OSM data). Markers are Flutter widgets. List → map navigation goes through a shared `MapFocusController`, not direct widget access.
 - GPS: `geolocator`, foreground position stream only.
-- Offline maps: a bundled zoom 0–5 world MBTiles asset (copied to app storage on first launch), plus user-approved region downloads (zoom 6–14, overzoomed beyond 14) into an app-managed SQLite tile store with a `regions` table. Tile lookup order: downloaded regions → online/cached tiles → bundled world map.
+- Offline maps: a bundled zoom 0–4 world MBTiles asset (`assets/map/`, built once by `dart run tool/build_world_map.dart`, which downloads from OpenFreeMap: ask the user before running it; copied to app storage on first launch; zoom 0–5 was over the 50 MB cap, PLAN.md D25), plus user-approved region downloads (zoom 5–14 now that the world map stops at 4, overzoomed beyond 14) into an app-managed SQLite tile store with a `regions` table. Tile lookup order: downloaded regions → online/cached tiles → bundled world map.
 
 ### Map/API usage constraints (hard rules)
 

@@ -1131,6 +1131,38 @@ high-contrast setting on to Flutter apps, so there it's the in-app switch). **No
 colours (the map look stays as it is); the map buttons follow the theme
 like the rest of the app.
 
+### D29. Polish: map speed, the long-press tip, the map cache in Settings (Phase 9b)
+**User decisions:** keep the map labels as they are (no `LabelMode.tile`);
+keep the 100 MB browse cache, but show its size in Settings with a way to
+clear it; a one-time long-press tip; the release step (removing the debug
+tools, the app id) in a separate commit, so it can be reverted.
+
+**Map speed, with no change to the look:**
+* The map page kept the zoom in its state and rebuilt itself (markers,
+  buttons) on **every frame of a zoom**, only to grey out "+" / "−" at the
+  limits. It now tracks only whether each button is enabled, so it
+  rebuilds only when one changes.
+* 64 MB of decoded tiles kept in memory (the package's default is 24 MB),
+  so zooming back and forth re-reads less; 4 decoding workers instead of 3.
+* For each tile, the downloaded regions and the browse cache are looked up
+  at the same time, not one after the other.
+* Not done (user decision): labels drawn into the tiles, and a lighter map
+  style. Both would change the look. How smooth it is should be judged on
+  a **release build** (`flutter run --release`): debug builds are several
+  times slower at drawing.
+
+**Long-press tip:** a small card on the map, "Tip: long-press the map to
+add a quest at that spot", with "Got it". It sits above the bottom-left
+badge and left of the map buttons, so it never covers the cards at the top.
+It goes for good after "Got it" or the first long-press, and is remembered
+in the settings table.
+
+**Map cache in Settings:** a "Storage" section: "Map cache: 34 MB of up to
+100 MB", what it's for, and **Clear**. Clear asks first (browsed maps
+download again; downloaded areas and the world map are kept), then shows
+"Clearing…" with a moving bar. The size is read again each time Settings
+opens. `MapCacheController` sits between the page and the cache.
+
 ---
 
 ## 4. Phases
@@ -1153,8 +1185,8 @@ push branch → open PR → progress report → you review → merge PR into
 | **7. Address search** | ✅ Done (PR #11) | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ✅ Done (PR #13) | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9a. Settings** | 🚧 In progress | `feature/09a-settings` | Settings page from the Quests "⋮" menu (gear, below Recycle bin): dark mode (System / Light / Dark) and high contrast mode, saved in SQLite (schema v6) (D28) | settings saved and loaded, migration v5→v6, theme contrast ratios, menu position, theme switches the whole app |
-| **9. Polish (rest)** | ⬜ Planned | *to be planned with the user* | No game-style map look (user decision); the map buttons stay as they are. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. The browse cache (`map_cache.db`, 100 MB, D27): size to revisit with the user's preference for caching little | — |
+| **9a. Settings** | ✅ Done (PR #14) | `feature/09a-settings` | Settings page from the Quests "⋮" menu (gear, below Recycle bin): dark mode (System / Light / Dark) and high contrast mode, saved in SQLite (schema v6) (D28) | settings saved and loaded, migration v5→v6, theme contrast ratios, menu position, theme switches the whole app |
+| **9b. Polish** | 🚧 In progress | `feature/09b-polish` | Map speed with no change to the look; one-time long-press tip; the map cache's size and Clear in Settings (D29); the release step in its own commit (debug tools removed, app id) | no rebuild while zooming between limits, layer settings, tip shown/dismissed/remembered, cache size and clear, confirmation |
 
 ---
 

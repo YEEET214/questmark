@@ -1163,6 +1163,38 @@ download again; downloaded areas and the world map are kept), then shows
 "Clearing…" with a moving bar. The size is read again each time Settings
 opens. `MapCacheController` sits between the page and the cache.
 
+### D30. Portrait only, and every screen tested at several sizes (Phase 9b)
+**User question:** does the app use a fixed resolution, and will it work on
+a bigger phone (Galaxy S24 Ultra)? **Answer:** Flutter lays out in logical
+pixels (screen pixels ÷ density), and the app's layouts fill the space they
+get, so a bigger phone simply shows more. What can go wrong is content not
+fitting with a large font size on a small screen. **User decisions:** lock
+the app to portrait, and test every screen at several sizes.
+
+**Portrait only:** `android:screenOrientation="portrait"` (Android),
+`UISupportedInterfaceOrientations` portrait only plus `UIRequiresFullScreen`
+(iOS: iPad multitasking would otherwise need every orientation), and
+`SystemChrome.setPreferredOrientations` in `main.dart` as a backstop. Tested
+by reading the platform files.
+
+**Screen-size tests** (`test/ui/screen_sizes_test.dart`): 13 screens (list,
+empty list, ⋮ menu, editor new and with a location, location picker,
+recycle bin, Settings, map with the long-press tip / the location card /
+the "download your area?" card, Offline maps, choosing an area) at 4 sizes
+(320×568 small phone, 360×640 the emulator, 412×915 Galaxy S24 Ultra,
+600×960 small tablet) and 3 font sizes (normal, ×1.3, ×2.0, Android's
+largest): 156 tests. Any overflow fails the test.
+
+**What they found (all at ×1.3 or ×2.0 text, fixed):**
+* the editor's "Set due date" / "Add location" buttons were wider than the
+  row allows: the rows are now a custom layout where the button takes at
+  most 40 % of the width and wraps;
+* the empty recycle bin's message was taller than a small screen: it
+  scrolls;
+* the area picker's panel grew taller than the screen: its details now
+  scroll within 40 % of the screen, with the Download button always shown;
+* the location card's buttons didn't fit on one line: they wrap.
+
 ---
 
 ## 4. Phases
@@ -1186,7 +1218,7 @@ push branch → open PR → progress report → you review → merge PR into
 | **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ✅ Done (PR #13) | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
 | **9a. Settings** | ✅ Done (PR #14) | `feature/09a-settings` | Settings page from the Quests "⋮" menu (gear, below Recycle bin): dark mode (System / Light / Dark) and high contrast mode, saved in SQLite (schema v6) (D28) | settings saved and loaded, migration v5→v6, theme contrast ratios, menu position, theme switches the whole app |
-| **9b. Polish** | 🚧 In progress | `feature/09b-polish` | Map speed with no change to the look; one-time long-press tip; the map cache's size and Clear in Settings (D29); the release step in its own commit (debug tools removed, app id) | no rebuild while zooming between limits, layer settings, tip shown/dismissed/remembered, cache size and clear, confirmation |
+| **9b. Polish** | 🚧 In progress | `feature/09b-polish` | Map speed with no change to the look; one-time long-press tip; the map cache's size and Clear in Settings (D29); the release step in its own commit (debug tools removed, app id); portrait only and every screen tested at 4 sizes × 3 font sizes (D30) | no rebuild while zooming between limits, layer settings, tip shown/dismissed/remembered, cache size and clear, confirmation |
 
 ---
 

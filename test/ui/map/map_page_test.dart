@@ -9,6 +9,7 @@ import 'package:questmark/services/location_service.dart';
 import 'package:questmark/state/location_controller.dart';
 import 'package:questmark/state/map_focus_controller.dart';
 import 'package:questmark/state/offline_maps_controller.dart';
+import 'package:questmark/state/settings_controller.dart';
 import 'package:questmark/state/task_list_controller.dart';
 import 'package:questmark/ui/map/map_attribution.dart';
 import 'package:questmark/ui/map/map_config.dart';
@@ -63,6 +64,7 @@ void main() {
     FakeLocationService? gpsService,
     FakeLastLocationRepository? saved,
     FakeOfflineMaps? offlineMaps,
+    SettingsController? settings,
   }) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue =
         const FakeAccessibilityFeatures(disableAnimations: true);
@@ -84,6 +86,8 @@ void main() {
         if (offlineMaps != null)
           ChangeNotifierProvider<OfflineMapsController>.value(
               value: offlineMaps),
+        if (settings != null)
+          ChangeNotifierProvider<SettingsController>.value(value: settings),
       ],
       child: MaterialApp(
         home: MapPage(
@@ -765,6 +769,47 @@ void main() {
       gps.emit(fixAt(56.462, -2.971));
       await tester.pumpAndSettle();
       expect(prompt, findsNothing);
+    });
+  });
+  group('long-press tip (Phase 9b, D29)', () {
+    final hint = find.byKey(const Key('longPressHint'));
+
+    testWidgets('shown until "Got it", then gone for good', (tester) async {
+      final settings = SettingsController();
+      await pumpMap(tester, [], settings: settings);
+      expect(hint, findsOneWidget);
+      expect(find.textContaining('long-press the map'), findsOneWidget);
+
+      await tapByKey(tester, 'longPressHintDismiss');
+      expect(hint, findsNothing);
+      expect(settings.longPressHintSeen, isTrue);
+    });
+
+    testWidgets('long-pressing the map counts as having seen it',
+        (tester) async {
+      final settings = SettingsController();
+      await pumpMap(tester, [], settings: settings);
+      await tester.longPress(find.byType(FlutterMap));
+      await tester.pumpAndSettle();
+      expect(settings.longPressHintSeen, isTrue);
+    });
+
+    testWidgets('not shown once seen', (tester) async {
+      final settings = SettingsController();
+      await settings.markLongPressHintSeen();
+      await pumpMap(tester, [], settings: settings);
+      expect(hint, findsNothing);
+    });
+
+    testWidgets('sits above the bottom-left badge, left of the map buttons',
+        (tester) async {
+      await pumpMap(tester, [seed(1, 'x')], settings: SettingsController());
+      final tip = tester.getRect(hint);
+      final badge =
+          tester.getRect(find.byKey(const Key('missingLocationBadge')));
+      final controls = tester.getRect(find.byType(MapControls));
+      expect(tip.bottom, lessThanOrEqualTo(badge.top));
+      expect(tip.right, lessThanOrEqualTo(controls.left));
     });
   });
 }

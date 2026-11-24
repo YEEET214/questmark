@@ -12,6 +12,7 @@ import '../../models/task.dart';
 import '../../state/location_controller.dart';
 import '../../state/map_focus_controller.dart';
 import '../../state/offline_maps_controller.dart';
+import '../../state/settings_controller.dart';
 import '../../state/task_list_controller.dart';
 import '../offline/offline_maps_page.dart';
 import '../offline/region_prompt.dart';
@@ -25,6 +26,7 @@ import 'map_attribution.dart';
 import 'map_config.dart';
 import 'map_controls.dart';
 import 'location_prompt.dart';
+import 'long_press_hint.dart';
 import 'missing_location_badge.dart';
 import 'player_marker.dart';
 import 'quest_details_sheet.dart';
@@ -298,6 +300,8 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   /// vibration confirms the long-press was recognised.
   void _newQuestAt(LatLng point) {
     HapticFeedback.mediumImpact();
+    // They've found it: the tip isn't needed any more (D29).
+    context.read<SettingsController?>()?.markLongPressHintSeen();
     openTaskEditor(context, null, location: point.toPickedGeoPoint());
   }
 
@@ -419,6 +423,14 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
             onOfflineMaps: hasOfflineMaps ? _openOfflineMaps : null,
             downloading: downloading,
           ),
+        ),
+        // The one-time tip (D29): above the bottom-left badge, left of the
+        // map buttons, so it never covers the cards at the top.
+        const Positioned(
+          left: 12,
+          right: 64,
+          bottom: 56,
+          child: LongPressHint(),
         ),
         if (hasOfflineMaps && fix != null && !showPrompt)
           Positioned(

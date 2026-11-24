@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'data/app_database.dart';
@@ -19,6 +20,11 @@ import 'ui/map/base_map_layer.dart';
 Future<void> main() async {
   // Plugins (sqflite) can only be used after the binding is initialised.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Portrait only (user decision, PLAN.md D30). Also set in
+  // AndroidManifest.xml and Info.plist, so the launch screen doesn't
+  // rotate either.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   // Open the database once, before the first frame. It stays open for the
   // app's lifetime; the OS closes it when the process ends.

@@ -5,6 +5,7 @@ import 'package:questmark/models/geo_point.dart';
 import 'package:questmark/models/task.dart';
 import 'package:questmark/models/geocode_result.dart';
 import 'package:questmark/state/navigation_controller.dart';
+import 'package:questmark/state/settings_controller.dart';
 
 import '../helpers/fake_geocoding_service.dart';
 import '../helpers/fake_location_service.dart';
@@ -297,6 +298,84 @@ void main() {
 
       expect(geo.reverseCalls, [GeoPoint(60.17, 24.94)]);
       expect((await repo.getAll()).single.address, 'Kaivokatu, Helsinki');
+    });
+  });
+  group('Settings (Phase 9a, D28)', () {
+    late SettingsController settings;
+
+    Future<void> pumpWithSettings(WidgetTester tester) async {
+      settings = SettingsController();
+      await tester.pumpWidget(QuestMarkApp(
+        taskRepository: FakeTaskRepository(),
+        locationService: FakeLocationService(),
+        lastLocationRepository: FakeLastLocationRepository(),
+        geocodingService: FakeGeocodingService(),
+        settings: settings,
+        mapBaseLayer: const SizedBox.shrink(),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openSettings(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settingsMenuItem')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a gear item below "Recycle bin" in the ⋮ menu',
+        (tester) async {
+      await pumpWithSettings(tester);
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      final bin = tester.getTopLeft(find.text('Recycle bin'));
+      final item = find.byKey(const Key('settingsMenuItem'));
+      expect(tester.getTopLeft(item).dy, greaterThan(bin.dy));
+      expect(
+          find.descendant(
+              of: item, matching: find.byIcon(Icons.settings_outlined)),
+          findsOneWidget);
+    });
+
+    testWidgets('opens Settings; dark mode changes the whole app',
+        (tester) async {
+      await pumpWithSettings(tester);
+      await openSettings(tester);
+      expect(find.text('High contrast mode'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('themeMode-dark')));
+      await tester.pumpAndSettle();
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.themeMode, ThemeMode.dark);
+      expect(Theme.of(tester.element(find.text('Settings'))).brightness,
+          Brightness.dark);
+    });
+
+    testWidgets('high contrast changes the colours at once', (tester) async {
+      await pumpWithSettings(tester);
+      await openSettings(tester);
+      await tester.tap(find.byKey(const Key('themeMode-light')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('highContrastSwitch')));
+      await tester.pumpAndSettle();
+      final scheme =
+          Theme.of(tester.element(find.text('Settings'))).colorScheme;
+      expect(scheme.surface, Colors.white);
+      expect(scheme.onSurfaceVariant, Colors.black);
+    });
+
+    testWidgets('the phone\'s own high-contrast setting is honoured too',
+        (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(highContrast: true);
+      addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      await pumpWithSettings(tester);
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      final scheme =
+          Theme.of(tester.element(find.text('Recycle bin'))).colorScheme;
+      expect(scheme.onSurfaceVariant, scheme.onSurface);
     });
   });
 }

@@ -4,9 +4,11 @@ import 'package:sqflite/sqflite.dart';
 import '../models/task.dart';
 import 'geocode_cache_repository.dart';
 import 'last_location_repository.dart';
+import 'settings_repository.dart';
 
 typedef _Loc = SqfliteLastLocationRepository;
 typedef _Geo = SqfliteGeocodeCache;
+typedef _Set = SqfliteSettingsRepository;
 
 /// One schema migration: a list of SQL statements that moves the database
 /// from version N to N + 1.
@@ -96,6 +98,16 @@ class AppDatabase {
       ''',
       'CREATE INDEX idx_geocode_cache_fetched '
           'ON ${_Geo.table} (${_Geo.colFetchedAt})',
+    ],
+    // v6 (Phase 9a): app settings (dark mode, high contrast), as text
+    // values by key (PLAN.md D28).
+    [
+      '''
+      CREATE TABLE ${_Set.table} (
+        ${_Set.colKey}   TEXT PRIMARY KEY,
+        ${_Set.colValue} TEXT NOT NULL
+      )
+      ''',
     ],
   ];
 

@@ -315,6 +315,27 @@ void main() {
       expect(mapController.camera.zoom, MapConfig.minZoom);
     });
 
+    testWidgets('zooming between the limits does not rebuild the map page '
+        '(map speed, Phase 9b)', (tester) async {
+      await pumpMap(tester, [seed(1, 'a', at: helsinki)]);
+      MapControls controls() =>
+          tester.widget<MapControls>(find.byType(MapControls));
+      final before = controls();
+
+      for (final z in [5.0, 7.5, 10.0, 12.3]) {
+        mapController.move(mapController.camera.center, z);
+        await tester.pump();
+      }
+      // A rebuild would have created a new MapControls widget.
+      expect(identical(controls(), before), isTrue);
+
+      // Reaching a limit does rebuild, to disable "+".
+      mapController.move(mapController.camera.center, MapConfig.maxZoom);
+      await tester.pumpAndSettle();
+      expect(identical(controls(), before), isFalse);
+      expect(controls().onZoomIn, isNull);
+    });
+
     testWidgets('controls sit bottom-right, the badge bottom-left',
         (tester) async {
       await pumpMap(tester, [seed(1, 'on map', at: helsinki), seed(2, 'x')]);

@@ -162,9 +162,12 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
   /// the app session and resets to hidden on restart.
   bool _showCompleted = false;
 
-  /// Current zoom, tracked to disable "+" / "−" at the limits. Null until
-  /// the map reports its first position.
-  double? _zoom;
+  /// Whether "+" / "−" are enabled (off at the zoom limits). Only these
+  /// two are tracked, not the zoom itself: setting state on every zoom
+  /// step rebuilt the whole map, markers included, on every frame of a
+  /// zoom (Phase 9b, map speed).
+  bool _canZoomIn = true;
+  bool _canZoomOut = true;
 
   late final CameraAnimator _camera = CameraAnimator(this, _map);
 
@@ -304,8 +307,13 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
       // Dragging the map ends follow mode, like in other map apps.
       if (_following) _setStateSafely(() => _following = false);
     }
-    if (camera.zoom == _zoom) return;
-    _setStateSafely(() => _zoom = camera.zoom);
+    final canIn = camera.zoom < MapConfig.maxZoom - 0.01;
+    final canOut = camera.zoom > MapConfig.minZoom + 0.01;
+    if (canIn == _canZoomIn && canOut == _canZoomOut) return;
+    _setStateSafely(() {
+      _canZoomIn = canIn;
+      _canZoomOut = canOut;
+    });
   }
 
   /// The map can report positions during layout, when setState isn't
@@ -361,14 +369,13 @@ class _QuestMapState extends State<_QuestMap> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final zoom = _zoom;
     // Only these two, so download progress doesn't rebuild the map.
     final hasOfflineMaps =
         context.select<OfflineMapsController?, bool>((c) => c != null);
     final downloading = context.select<OfflineMapsController?, bool>(
         (c) => c?.isDownloading ?? false);
-    final canZoomIn = zoom == null || zoom < MapConfig.maxZoom - 0.01;
-    final canZoomOut = zoom == null || zoom > MapConfig.minZoom + 0.01;
+    final canZoomIn = _canZoomIn;
+    final canZoomOut = _canZoomOut;
     final fix = _location.current;
     final status = _location.status;
     final showPrompt = status == LocationStatus.denied && !_promptDismissed;

@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:questmark/data/mbtiles_archive.dart';
 import 'package:questmark/data/offline_region_store.dart';
 import 'package:questmark/ui/map/base_map_layer.dart';
+import 'package:questmark/ui/map/map_config.dart';
 import 'package:questmark/ui/map/world_map_tiles.dart';
 
 import '../../helpers/test_mbtiles.dart';
@@ -213,6 +214,24 @@ void main() {
       expect(find.byKey(const Key('mapOfflineBanner')), findsOneWidget);
       expect(find.text('Offline world map'), findsOneWidget);
       expect(find.byType(MapLoadErrorBanner), findsNothing);
+    });
+
+    testWidgets('the layer uses the speed settings (Phase 9b), labels as '
+        'before', (tester) async {
+      await pumpLayer(
+        tester,
+        () async => throw Exception('offline'),
+        loadWorldMap: () async => world,
+        loadOfflineStyle: (_) async => _style('offline'),
+      );
+      await tester.pumpAndSettle();
+      final layer =
+          tester.widget<vt.VectorTileLayer>(find.byType(vt.VectorTileLayer));
+      expect(layer.memoryCacheMaxBytes, MapConfig.memoryCacheBytes);
+      expect(layer.memoryCacheMaxBytes, greaterThan(24 * 1024 * 1024));
+      expect(layer.concurrency, MapConfig.decodeWorkers);
+      expect(layer.labelMode, vt.LabelMode.screen,
+          reason: 'the user chose to keep labels as they are');
     });
 
     testWidgets('Retry on the offline banner switches to the online map '

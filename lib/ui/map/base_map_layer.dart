@@ -277,6 +277,11 @@ class _OpenFreeMapLayerState extends State<OpenFreeMapLayer> {
         // cache; the vector tiles have the app's own (D27).
         diskCacheMaximumSizeInBytes: MapConfig.diskCacheBytes,
         diskCacheTtl: MapConfig.diskCacheTtl,
+        // Map speed (Phase 9b), with no change to the look: more decoded
+        // tiles kept in memory, so zooming back and forth re-reads less,
+        // and one more background worker decoding tiles.
+        memoryCacheMaxBytes: MapConfig.memoryCacheBytes,
+        concurrency: MapConfig.decodeWorkers,
       );
       if (!map.offline) return layer;
       return Stack(

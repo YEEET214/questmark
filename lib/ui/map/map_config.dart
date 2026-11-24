@@ -60,4 +60,10 @@ abstract final class MapConfig {
   static const tileCacheBytes = 100 * 1000 * 1000; // 100 MB
   static const diskCacheBytes = 20 * 1024 * 1024; // 20 MB
   static const diskCacheTtl = Duration(days: 30);
+
+  /// Decoded tiles kept in memory (the package's default is 24 MB), and
+  /// the background workers decoding tiles (default 3). Phase 9b, map
+  /// speed.
+  static const memoryCacheBytes = 64 * 1024 * 1024;
+  static const decodeWorkers = 4;
 }

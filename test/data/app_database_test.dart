@@ -188,6 +188,23 @@ void main() {
       expect(await current.query('geocode_cache'), isEmpty);
     });
 
+    test('the real v5 -> v6 upgrade adds an empty settings table', () async {
+      final v5 = await AppDatabase.open(
+          factory: databaseFactoryFfi,
+          path: path,
+          schema: AppDatabase.migrations.sublist(0, 5));
+      await v5.insert('tasks', {...validRow(), 'title': 'kept'});
+      await v5.close();
+
+      final current =
+          await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+      addTearDown(current.close);
+
+      expect(await current.getVersion(), greaterThanOrEqualTo(6));
+      expect((await current.query('tasks')).single['title'], 'kept');
+      expect(await current.query('settings'), isEmpty);
+    });
+
     test('a failing migration rolls back and leaves the old data intact',
         () async {
       await createV1WithOneTask();

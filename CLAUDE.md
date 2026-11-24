@@ -41,7 +41,7 @@ The environment is Windows (Flutter 3.47.x / Dart 3.13.x).
 
 Layering: **UI → state (`ChangeNotifier` via `provider`) → repositories/services → SQLite/HTTP/GPS**. The UI never touches SQLite, HTTP or GPS directly. Services (location, geocoding, tile download) are abstract classes so tests can inject fakes. `test/` mirrors `lib/`.
 
-- `lib/models`, `lib/data` (sqflite helper + versioned migrations + repositories), `lib/services`, `lib/state`, `lib/ui/{tasks,map,offline}`.
+- `lib/models`, `lib/data` (sqflite helper + versioned migrations + repositories), `lib/services`, `lib/state`, `lib/ui/{tasks,map,offline,settings}`.
 - SQLite tests use `sqflite_common_ffi` with an in-memory database, so they run under plain `flutter test` without an emulator.
 - Map: `flutter_map` 8.3.2 + `flutter_map_vector_tiles` 2.11.0 (exact pins; package use confined to `lib/ui/map/base_map_layer.dart` and `lib/ui/map/world_map_tiles.dart`), drawing **OpenFreeMap vector tiles** (OSM data). Markers are Flutter widgets. List → map navigation goes through a shared `MapFocusController`, not direct widget access.
 - GPS: `geolocator`, foreground position stream only.

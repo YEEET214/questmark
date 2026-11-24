@@ -10,6 +10,7 @@ import 'state/location_controller.dart';
 import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
 import 'state/offline_maps_controller.dart';
+import 'state/settings_controller.dart';
 import 'state/task_list_controller.dart';
 import 'state/task_list_view_controller.dart';
 import 'ui/home_shell.dart';
@@ -29,6 +30,7 @@ class QuestMarkApp extends StatelessWidget {
     required this.lastLocationRepository,
     required this.geocodingService,
     this.navigationController,
+    this.settings,
     this.offlineMaps,
     this.regionTiles,
     this._mapBaseLayer,
@@ -48,6 +50,10 @@ class QuestMarkApp extends StatelessWidget {
 
   /// Optional pre-built controller, mainly for tests.
   final NavigationController? navigationController;
+
+  /// Dark mode and high contrast (PLAN.md D28), loaded in main.dart before
+  /// the first frame. Tests may leave it out: the defaults, not saved.
+  final SettingsController? settings;
 
   /// Downloaded map regions (PLAN.md D26): the Offline maps screen and
   /// the "download your area?" card. Left out (null) in most tests, which
@@ -72,6 +78,9 @@ class QuestMarkApp extends StatelessWidget {
         // picker), so they draw the same map and tests can replace it.
         Provider<MapBaseLayer>.value(value: MapBaseLayer(mapBaseLayer)),
         Provider<GeocodingService>.value(value: geocodingService),
+        ChangeNotifierProvider<SettingsController>(
+          create: (_) => settings ?? SettingsController(),
+        ),
         ChangeNotifierProvider<NavigationController>(
           create: (_) => navigationController ?? NavigationController(),
         ),
@@ -96,12 +105,23 @@ class QuestMarkApp extends StatelessWidget {
         ),
       ],
       child: _ForegroundLocation(
-        child: MaterialApp(
-          title: 'QuestMark',
-          debugShowCheckedModeBanner: false,
-          theme: buildQuestTheme(Brightness.light),
-          darkTheme: buildQuestTheme(Brightness.dark),
-          home: HomeShell(mapBaseLayer: mapBaseLayer),
+        child: Consumer<SettingsController>(
+          builder: (context, s, _) => MaterialApp(
+            title: 'QuestMark',
+            debugShowCheckedModeBanner: false,
+            themeMode: s.themeMode.themeMode,
+            theme: buildQuestTheme(Brightness.light,
+                highContrast: s.highContrast),
+            darkTheme: buildQuestTheme(Brightness.dark,
+                highContrast: s.highContrast),
+            // Used when the phone's own high-contrast setting is on (iOS
+            // "Increase Contrast"; Android doesn't tell Flutter apps).
+            highContrastTheme:
+                buildQuestTheme(Brightness.light, highContrast: true),
+            highContrastDarkTheme:
+                buildQuestTheme(Brightness.dark, highContrast: true),
+            home: HomeShell(mapBaseLayer: mapBaseLayer),
+          ),
         ),
       ),
     );

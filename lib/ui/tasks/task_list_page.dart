@@ -9,6 +9,7 @@ import '../../state/task_list_controller.dart';
 import '../../state/task_list_view_controller.dart';
 import '../common/undo_snack_bar.dart';
 import '../formatting.dart';
+import '../settings/settings_page.dart';
 import 'query_labels.dart';
 import 'task_actions.dart';
 import 'task_filter_sheet.dart';
@@ -344,10 +345,10 @@ class _DateFilterChips extends StatelessWidget {
   }
 }
 
-enum _MoreAction { deleteCompleted, recycleBin }
+enum _MoreAction { deleteCompleted, recycleBin, settings }
 
 /// The "⋮" menu: "Delete all completed tasks" (disabled when there are
-/// none) and "Recycle bin" (PLAN.md D18).
+/// none), "Recycle bin" (PLAN.md D18) and "Settings" (D28).
 class _MoreMenu extends StatelessWidget {
   const _MoreMenu({required this.hasCompleted});
 
@@ -361,6 +362,7 @@ class _MoreMenu extends StatelessWidget {
       onSelected: (action) => switch (action) {
         _MoreAction.deleteCompleted => deleteAllCompleted(context),
         _MoreAction.recycleBin => openRecycleBin(context),
+        _MoreAction.settings => SettingsPage.open(context),
       },
       itemBuilder: (_) => [
         PopupMenuItem(
@@ -378,6 +380,15 @@ class _MoreMenu extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.delete_outline),
             title: Text('Recycle bin'),
+          ),
+        ),
+        const PopupMenuItem(
+          key: Key('settingsMenuItem'),
+          value: _MoreAction.settings,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.settings_outlined),
+            title: Text('Settings'),
           ),
         ),
       ],

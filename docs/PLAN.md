@@ -1192,9 +1192,14 @@ push branch → open PR → progress report → you review → merge PR into
 
 ## 5. Open questions
 
-**Before release (to do when the app is finished):**
-* Remove the temporary developer tools: `lib/dev/`, the `DevToolsButton`
-  in the Quests app bar, and `test/dev/`.
-* Replace the template app id `com.example.questmark`.
-* None blocking right now. To revisit in Phase 8a: the bundled world-map
-  size, and whether zoom 0–5 fits the size goal.
+**Before release: done in Phase 9b**, in a commit of its own, so it can
+be reverted to get the debug tools back (user decision):
+* The temporary developer tools are removed: `lib/dev/`, the
+  `DevToolsButton` (bug icon) in the Quests app bar, and `test/dev/`.
+* The app id is `com.yeeet214.questmarkbeta` (Android `applicationId` and
+  `namespace`, iOS bundle id), replacing the template
+  `com.example.questmark`. The app won't be published on an app store; it
+  is only downloadable from GitHub (user). A new id is a different app to
+  the phone: it installs beside the old one, whose quests stay with it.
+
+Nothing else is open.

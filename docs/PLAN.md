@@ -33,6 +33,7 @@ made.
 | R16 | Completed tasks hidden on the map by default; a toggle button shows them | 4 |
 | R17 | Recycle bin: deleted tasks are kept 30 days and can be restored, then deleted permanently | 4c |
 | R18 | "Delete all completed tasks" moves them all to the recycle bin, after a Yes/No confirmation | 4c |
+| R19 | Settings page (gear item in the Quests "⋮" menu, below Recycle bin) with dark mode and a high contrast mode | 9a |
 
 ---
 
@@ -1097,6 +1098,39 @@ the network.
 deletes the tiles and then compacts the file). The area now shows
 "Deleting…" with a moving bar, and its menu is hidden, until it's gone.
 
+### D28. Settings: dark mode and high contrast mode (Phase 9a)
+**User decisions (start of Phase 9):** no change to how the map looks (no
+game-style map theme); the map buttons stay as they are. Add **dark mode**
+and a **high contrast mode** on a **Settings page**, opened from a gear item
+in the Quests page's "⋮" menu, below "Recycle bin".
+
+**Settings page:**
+* **Theme:** System default (follows the phone, as before, and the
+  default) / Light / Dark mode, as radio buttons, so all three choices are
+  visible at once.
+* **High contrast mode:** a switch, off by default.
+* Changes apply at once and are saved.
+
+**Storage:** a `settings` table (key → text value) in the app database,
+**schema v6**. The settings are loaded in `main.dart` *before* the first
+frame, so the app never shows the wrong theme for a moment. A broken read
+or write never stops the app: the defaults (or the change, for this session)
+still apply. `SettingsController` (ChangeNotifier) sits above `MaterialApp`.
+
+**High contrast theme** (`buildQuestTheme(..., highContrast: true)`):
+* Material 3's highest contrast level for the colours generated from the
+  quest gold (`ColorScheme.fromSeed(contrastLevel: 1.0)`);
+* the background pure white (light) or pure black (dark), with text in the
+  opposite colour (21:1);
+* secondary text and outlines in the full text colour, thicker dividers;
+* buttons tested to meet WCAG AAA (7:1) in light and dark.
+
+On iOS, the phone's own "Increase Contrast" setting also switches it on,
+through `MaterialApp`'s `highContrastTheme` (Android doesn't pass its
+high-contrast setting on to Flutter apps, so there it's the in-app switch). **Not changed:** the map tiles and the quest marker
+colours (the map look stays as it is); the map buttons follow the theme
+like the rest of the app.
+
 ---
 
 ## 4. Phases
@@ -1118,8 +1152,9 @@ push branch → open PR → progress report → you review → merge PR into
 | **6. Pin on map** | ✅ Done (PR #10) | `feature/06-pin-location` | Location picker in the task editor (pin fixed in the middle, the map moves under it), plus long-press on the world map for a new quest there (D23) | picker returns coordinates, editor saves them |
 | **7. Address search** | ✅ Done (PR #11) | `feature/07-address-search` | Nominatim geocoding + reverse geocoding, rate limiter, SQLite cache | rate limiter spacing, cache hit avoids HTTP, JSON parsing, errors |
 | **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
-| **8b. Region download** | 🚧 In progress | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
-| **9. Polish** | ⬜ Planned | *to be planned later* | UI design updates (game-style map theme etc.), planned with you when we get there. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. The browse cache (`map_cache.db`, 100 MB, D27): size to revisit with the user's preference for caching little | — |
+| **8b. Region download** | ✅ Done (PR #13) | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
+| **9a. Settings** | 🚧 In progress | `feature/09a-settings` | Settings page from the Quests "⋮" menu (gear, below Recycle bin): dark mode (System / Light / Dark) and high contrast mode, saved in SQLite (schema v6) (D28) | settings saved and loaded, migration v5→v6, theme contrast ratios, menu position, theme switches the whole app |
+| **9. Polish (rest)** | ⬜ Planned | *to be planned with the user* | No game-style map look (user decision); the map buttons stay as they are. To revisit: tile cache size (100 MB now; the user prefers caching little) and the brief blank background during long glides into uncached areas. Making long-press on the map discoverable (e.g. a one-time hint). **Map speed** (user report after Phase 8a: zooming is laggy with the network on; first check a release build, since debug builds and the emulator are much slower): draw labels into the tiles (`LabelMode.tile`), a lighter map style (fewer layers), more decoding workers and a bigger finished-tile cache. The browse cache (`map_cache.db`, 100 MB, D27): size to revisit with the user's preference for caching little | — |
 
 ---
 

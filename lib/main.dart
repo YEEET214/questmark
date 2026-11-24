@@ -14,6 +14,7 @@ import 'services/region_downloader.dart';
 import 'services/tile_fetcher.dart';
 import 'state/offline_maps_controller.dart';
 import 'state/settings_controller.dart';
+import 'ui/map/base_map_layer.dart';
 
 Future<void> main() async {
   // Plugins (sqflite) can only be used after the binding is initialised.
@@ -51,6 +52,9 @@ Future<void> main() async {
       settings: settings,
       offlineMaps: offlineMaps,
       regionTiles: regions,
+      // The same cache the map draws from (opened once, app-wide), for
+      // its size and "Clear" in Settings.
+      tileCache: await openAppTileCache(),
     ),
   );
 }

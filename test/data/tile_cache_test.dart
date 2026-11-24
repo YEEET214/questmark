@@ -70,6 +70,16 @@ void main() {
     expect(await cache.get(14, 99, 0), isNotNull, reason: 'newest');
   });
 
+  test('clear removes everything', () async {
+    await cache.put(14, 1, 1, bytes(70));
+    await cache.put(14, 1, 2, bytes(30));
+    await cache.clear();
+    expect(cache.sizeBytes, 0);
+    expect(await cache.get(14, 1, 1), isNull);
+    await cache.put(14, 1, 3, bytes(5));
+    expect(cache.sizeBytes, 5, reason: 'still usable afterwards');
+  });
+
   test('the size is known again after reopening', () async {
     final dir = await Directory.systemTemp.createTemp('tile_cache');
     final path = '${dir.path}/${SqfliteTileCache.fileName}';

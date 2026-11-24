@@ -236,17 +236,17 @@ class _TaskEditorPageState extends State<TaskEditorPage> {
               ),
             ),
             const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event),
-              title: Text(dueDay == null
+            _EditorRow(
+              icon: Icons.event,
+              title: dueDay == null
                   ? 'No due date'
-                  : 'Due ${formatDate(dueDay)}'),
+                  : 'Due ${formatDate(dueDay)}',
               onTap: _pickDueDate,
               trailing: dueDay == null
                   ? TextButton(
                       onPressed: _pickDueDate,
-                      child: const Text('Set due date'),
+                      child: const Text('Set due date',
+                          textAlign: TextAlign.center),
                     )
                   : IconButton(
                       tooltip: 'Remove due date',
@@ -286,20 +286,17 @@ class _LocationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = this.location;
-    return ListTile(
+    return _EditorRow(
       key: const Key('locationTile'),
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.place_outlined),
-      title: Text(location == null
-          ? 'No location'
-          : address ?? 'Pinned on the map'),
-      subtitle: location == null ? null : Text(formatCoordinates(location)),
+      icon: Icons.place_outlined,
+      title: location == null ? 'No location' : address ?? 'Pinned on the map',
+      subtitle: location == null ? null : formatCoordinates(location),
       onTap: onPick,
       trailing: location == null
           ? TextButton(
               key: const Key('pickLocationButton'),
               onPressed: onPick,
-              child: const Text('Add location'),
+              child: const Text('Add location', textAlign: TextAlign.center),
             )
           : IconButton(
               key: const Key('clearLocationButton'),
@@ -307,6 +304,69 @@ class _LocationTile extends StatelessWidget {
               icon: const Icon(Icons.clear),
               onPressed: onClear,
             ),
+    );
+  }
+}
+
+/// One row of the editor (due date, location): an icon, the value, and a
+/// button. Like a ListTile, but the button may take at most 40 % of the
+/// width and wraps its text, so with a large font size on a small phone it
+/// grows taller instead of running off the screen (PLAN.md D30).
+class _EditorRow extends StatelessWidget {
+  const _EditorRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.onTap,
+    required this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final subtitle = this.subtitle;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: LayoutBuilder(
+          builder: (context, box) => Row(
+            children: [
+              Icon(icon, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.bodyLarge),
+                      if (subtitle != null)
+                        Text(
+                          subtitle,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: box.maxWidth * 0.4),
+                child: trailing,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

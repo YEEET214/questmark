@@ -50,8 +50,9 @@ class LocationPrompt extends StatelessWidget {
                 style: theme.textTheme.bodySmall,
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            // Wraps onto a second line with a large font size (D30).
+            Wrap(
+              alignment: WrapAlignment.end,
               children: [
                 TextButton(onPressed: onDismiss, child: const Text('Not now')),
                 TextButton(onPressed: onAllow, child: const Text('Allow')),

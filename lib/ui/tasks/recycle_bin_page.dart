@@ -108,7 +108,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       ),
       body: binned.isEmpty
           ? Center(
-              child: Padding(
+              // Scrolls if a large font size makes it taller than the
+              // screen (D30).
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

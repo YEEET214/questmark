@@ -36,9 +36,10 @@ The app is portrait only, and is tested on screens from small phones to small ta
 
 ## Install
 
-There is no store release. To get the app on an Android phone, build the APK yourself (below) and install it. The phone will ask you to allow installing apps from this source.
+There is no app store release.
 
-Maintainers can attach the APK to a [GitHub release](https://github.com/YEEET214/questmark/releases) so others can download it directly.
+- **Android:** download `app-release.apk` from the [latest GitHub release](https://github.com/YEEET214/questmark/releases/latest) and open it on your phone. The phone will ask you to allow installing apps from this source.
+- **iOS:** there is no ready-made `.ipa`, because iOS apps can only be built on a Mac. On a Mac with Xcode and Flutter, build it from the source with `flutter build ios --release` (see below), then install it on your iPhone through Xcode.
 
 ## Build it yourself
 
@@ -51,7 +52,8 @@ flutter pub get
 
 flutter run                 # on a connected phone or emulator (debug)
 flutter run --release       # judge speed on this: debug builds draw much slower
-flutter build apk --release # the APK ends up in build/app/outputs/flutter-apk/
+flutter build apk --release # Android: the APK ends up in build/app/outputs/flutter-apk/
+flutter build ios --release # iOS: on a Mac with Xcode only
 ```
 
 Development checks:

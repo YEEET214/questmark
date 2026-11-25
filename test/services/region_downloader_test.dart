@@ -1,3 +1,9 @@
+// These tests download whole regions (hundreds of tiles) into a real
+// in-memory SQLite database. Alone they take seconds, but when the full
+// suite runs many files in parallel they can pass the default 30 s.
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';

@@ -879,7 +879,8 @@ only "pick on map"), and the picker is titled **Choose location**.
 **Errors** are shown in the search card in plain words: no connection,
 service busy (HTTP 429), service unavailable, unreadable answer.
 
-**Privacy note (user decision, PR #11 review):** under the search field
+**Privacy note (user decision, PR #11 review; moved to Settings →
+Privacy in Phase 9b, D31):** under the search field
 the picker says "Searches and quest locations are sent to OpenStreetMap's
 Nominatim service to find addresses. Your own location is never sent."
 (The last sentence was added at the user's request.) It's true: the GPS
@@ -1195,6 +1196,29 @@ largest): 156 tests. Any overflow fails the test.
   scroll within 40 % of the screen, with the Download button always shown;
 * the location card's buttons didn't fit on one line: they wrap.
 
+### D31. The privacy note in Settings, and the app icon (Phase 9b)
+**User requests after testing 9b:**
+* **The Nominatim note** under the address search covered too much of the
+  map. It moved, word for word, to a new **Privacy** section in Settings
+  ("Address search"). The download card and the area picker keep their
+  one-line note on where an area's name comes from. (Changes D24's "under
+  the search field".)
+* **The app icon:** the compass from the empty quest list
+  (`Icons.explore_outlined`) in the dark theme's colours: gold `#eec06c`
+  on `#17130b`.
+
+**How the icon is made:** `tool/app_icon/render_app_icon_test.dart` draws
+the source images with Flutter itself, from the app's own dark theme and
+Flutter's Material icon font, so it matches the app exactly; no image
+editor or extra system software is needed. `flutter_launcher_icons` (dev
+dependency) then makes every Android size, an adaptive icon (its
+foreground drawn larger to allow for the tool's 16 % inset), an Android 13
+themed icon, and the iOS set without transparency. To change it: re-run
+both commands (see the file). The tool's known Xcode edit
+(`ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`)
+was put back to `YES`. A test checks the icon's colours still match the
+dark theme.
+
 ---
 
 ## 4. Phases
@@ -1218,7 +1242,7 @@ push branch → open PR → progress report → you review → merge PR into
 | **8a. Bundled world map** | ✅ Done (PR #12) | `feature/08a-world-map` | Dev script that builds the z0–5 world MBTiles; bundled asset; copy on first launch; offline rendering | asset copy, tile lookup, fallback order |
 | **8b. Region download** | ✅ Done (PR #13) | `feature/08b-region-download` | Current-region prompt, Offline maps screen, estimate → throttled download → resume/cancel → list/delete | tile count maths, 3,000-tile cap, concurrency limit, resume, shared-tile deletion |
 | **9a. Settings** | ✅ Done (PR #14) | `feature/09a-settings` | Settings page from the Quests "⋮" menu (gear, below Recycle bin): dark mode (System / Light / Dark) and high contrast mode, saved in SQLite (schema v6) (D28) | settings saved and loaded, migration v5→v6, theme contrast ratios, menu position, theme switches the whole app |
-| **9b. Polish** | 🚧 In progress | `feature/09b-polish` | Map speed with no change to the look; one-time long-press tip; the map cache's size and Clear in Settings (D29); the release step in its own commit (debug tools removed, app id); portrait only and every screen tested at 4 sizes × 3 font sizes (D30) | no rebuild while zooming between limits, layer settings, tip shown/dismissed/remembered, cache size and clear, confirmation |
+| **9b. Polish** | 🚧 In progress | `feature/09b-polish` | Map speed with no change to the look; one-time long-press tip; the map cache's size and Clear in Settings (D29); the release step in its own commit (debug tools removed, app id); portrait only and every screen tested at 4 sizes × 3 font sizes (D30); the privacy note moved to Settings, and the app icon (D31) | no rebuild while zooming between limits, layer settings, tip shown/dismissed/remembered, cache size and clear, confirmation |
 
 ---
 

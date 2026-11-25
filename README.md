@@ -4,6 +4,9 @@ A to-do app with the feel of an open-world video game map. Your tasks are **ques
 
 Built with Flutter for **Android** and **iOS**. Everything is stored on your phone; there is no account and no server of our own.
 
+### Disclaimer
+This project was made with Claude Code on the Opus 5.5 model.
+
 <p align="center">
   <img src="assets/icon/app_icon.png" alt="QuestMark app icon" width="120">
 </p>
@@ -91,6 +94,7 @@ docs/PLAN.md  requirements, phases and every design decision
 ```
 
 The full plan, including why each decision was made, is in [docs/PLAN.md](docs/PLAN.md).
+This project was made with Claude Code on the Opus 5.5 model.
 
 ## License
 

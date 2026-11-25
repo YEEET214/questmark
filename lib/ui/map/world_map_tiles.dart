@@ -257,10 +257,14 @@ class LocalFirstTileProvider extends vt.VectorTileProvider {
     }
     final world = await _local.worldTile(tile);
     if (world != null) return world;
-    final region = await _local.regionTile(tile);
+    // Both lookups at once: each is a database query, and doing them one
+    // after the other made every tile wait twice (Phase 9b, map speed).
+    final regionLookup = _local.regionTile(tile);
+    final cacheLookup = _local.cached(tile);
+    final region = await regionLookup;
     if (region != null) return region;
 
-    final cached = await _local.cached(tile);
+    final cached = await cacheLookup;
     if (cached != null && cached.fresh) {
       return LocalTiles.response(cached.bytes);
     }

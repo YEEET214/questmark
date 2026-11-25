@@ -32,12 +32,18 @@ class SettingsController extends ChangeNotifier {
 
   static const themeModeKey = 'theme_mode';
   static const highContrastKey = 'high_contrast';
+  static const longPressHintSeenKey = 'hint_long_press_seen';
 
   AppThemeMode _themeMode = AppThemeMode.system;
   bool _highContrast = false;
+  bool _longPressHintSeen = false;
 
   AppThemeMode get themeMode => _themeMode;
   bool get highContrast => _highContrast;
+
+  /// Whether the map's one-time "long-press to add a quest" tip has been
+  /// dismissed, or the user has long-pressed the map (PLAN.md D29).
+  bool get longPressHintSeen => _longPressHintSeen;
 
   Future<void> load() async {
     final repo = _repository;
@@ -46,6 +52,7 @@ class SettingsController extends ChangeNotifier {
       final saved = await repo.loadAll();
       _themeMode = AppThemeMode.fromName(saved[themeModeKey]);
       _highContrast = saved[highContrastKey] == 'true';
+      _longPressHintSeen = saved[longPressHintSeenKey] == 'true';
       notifyListeners();
     } catch (e) {
       // The defaults are fine; the app must start regardless.
@@ -65,6 +72,13 @@ class SettingsController extends ChangeNotifier {
     _highContrast = on;
     notifyListeners();
     await _save(highContrastKey, '$on');
+  }
+
+  Future<void> markLongPressHintSeen() async {
+    if (_longPressHintSeen) return;
+    _longPressHintSeen = true;
+    notifyListeners();
+    await _save(longPressHintSeenKey, 'true');
   }
 
   Future<void> _save(String key, String value) async {

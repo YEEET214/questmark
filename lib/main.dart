@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'data/app_database.dart';
@@ -14,10 +15,16 @@ import 'services/region_downloader.dart';
 import 'services/tile_fetcher.dart';
 import 'state/offline_maps_controller.dart';
 import 'state/settings_controller.dart';
+import 'ui/map/base_map_layer.dart';
 
 Future<void> main() async {
   // Plugins (sqflite) can only be used after the binding is initialised.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Portrait only (user decision, PLAN.md D30). Also set in
+  // AndroidManifest.xml and Info.plist, so the launch screen doesn't
+  // rotate either.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   // Open the database once, before the first frame. It stays open for the
   // app's lifetime; the OS closes it when the process ends.
@@ -51,6 +58,9 @@ Future<void> main() async {
       settings: settings,
       offlineMaps: offlineMaps,
       regionTiles: regions,
+      // The same cache the map draws from (opened once, app-wide), for
+      // its size and "Clear" in Settings.
+      tileCache: await openAppTileCache(),
     ),
   );
 }

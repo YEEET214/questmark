@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 
 import 'data/last_location_repository.dart';
 import 'data/offline_region_store.dart';
+import 'data/tile_cache.dart';
 import 'data/task_repository.dart';
 import 'services/geocoding_service.dart';
 import 'services/location_service.dart';
 import 'state/location_controller.dart';
+import 'state/map_cache_controller.dart';
 import 'state/map_focus_controller.dart';
 import 'state/navigation_controller.dart';
 import 'state/offline_maps_controller.dart';
@@ -15,6 +17,7 @@ import 'state/task_list_controller.dart';
 import 'state/task_list_view_controller.dart';
 import 'ui/home_shell.dart';
 import 'ui/map/base_map_layer.dart';
+import 'ui/map/map_config.dart';
 import 'ui/theme.dart';
 
 /// Root widget. Provides the app-wide state objects and the theme.
@@ -33,6 +36,7 @@ class QuestMarkApp extends StatelessWidget {
     this.settings,
     this.offlineMaps,
     this.regionTiles,
+    this.tileCache,
     this._mapBaseLayer,
   });
 
@@ -63,6 +67,10 @@ class QuestMarkApp extends StatelessWidget {
   /// The downloaded tiles, for the map to draw from.
   final RegionTileSource? regionTiles;
 
+  /// The map's browse cache (D27), for its size and "Clear" in Settings
+  /// (D29). Left out in most tests, which then have no Storage section.
+  final NetworkTileCache? tileCache;
+
   /// The map's base layer. Tests pass an empty widget so no map tiles are
   /// loaded from the network.
   final Widget? _mapBaseLayer;
@@ -72,6 +80,7 @@ class QuestMarkApp extends StatelessWidget {
     final mapBaseLayer =
         _mapBaseLayer ?? OpenFreeMapLayer(regionTiles: regionTiles);
     final offlineMaps = this.offlineMaps;
+    final tileCache = this.tileCache;
     return MultiProvider(
       providers: [
         // The base map for pages pushed on top of the shell (the location
@@ -98,6 +107,11 @@ class QuestMarkApp extends StatelessWidget {
         if (offlineMaps != null)
           ChangeNotifierProvider<OfflineMapsController>.value(
               value: offlineMaps),
+        if (tileCache != null)
+          ChangeNotifierProvider<MapCacheController>(
+            create: (_) => MapCacheController(tileCache,
+                maxBytes: MapConfig.tileCacheBytes),
+          ),
         ChangeNotifierProvider<LocationController>(
           create: (_) =>
               LocationController(locationService, lastLocationRepository)

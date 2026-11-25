@@ -163,6 +163,15 @@ class _RegionSelectPageState extends State<RegionSelectPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // At most 40 % of the screen, scrolling inside, so a large
+              // font size never pushes the map or the button away (D30).
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.4),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
               Text(
                 'Move the map to put the area in the square.',
                 style: theme.textTheme.bodySmall,
@@ -180,6 +189,10 @@ class _RegionSelectPageState extends State<RegionSelectPage> {
                 '$regionEstimateNote $regionNameNote',
                 style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant),
+              ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               FilledButton.icon(

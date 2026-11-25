@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../dev/dev_tools.dart';
 import '../../models/task.dart';
 import '../../models/task_query.dart';
 import '../../state/navigation_controller.dart';
@@ -122,8 +121,6 @@ class _TaskListPageState extends State<TaskListPage> {
           // Always available, even with no quests, so the recycle bin can
           // always be reached.
           _MoreMenu(hasCompleted: controller.completedTasks.isNotEmpty),
-          // TEMPORARY: debug-only developer tools (removed before release).
-          const DevToolsButton(),
         ],
       ),
       // Hidden while typing a search (the keyboard is open then), so it

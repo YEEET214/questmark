@@ -52,6 +52,18 @@ void main() {
     expect(notified, 2);
   });
 
+  test('the long-press tip: not seen at first; seen is saved and loaded',
+      () async {
+    final repo = FakeSettingsRepository();
+    final c = SettingsController(repo);
+    expect(c.longPressHintSeen, isFalse);
+    await c.markLongPressHintSeen();
+    expect(repo.saved['hint_long_press_seen'], 'true');
+    final again = SettingsController(repo);
+    await again.load();
+    expect(again.longPressHintSeen, isTrue);
+  });
+
   test('an unknown saved value falls back to the default', () async {
     final c =
         SettingsController(FakeSettingsRepository({'theme_mode': 'purple'}));

@@ -1,3 +1,9 @@
+// These tests download whole regions (hundreds of tiles) into a real
+// in-memory SQLite database. Alone they take seconds, but when the full
+// suite runs many files in parallel they can pass the default 30 s.
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:questmark/data/offline_region_store.dart';
 import 'package:questmark/models/geo_point.dart';

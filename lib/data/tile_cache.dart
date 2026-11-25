@@ -17,6 +17,12 @@ class CachedTile {
 abstract interface class NetworkTileCache {
   Future<CachedTile?> get(int z, int x, int y);
   Future<void> put(int z, int x, int y, Uint8List bytes);
+
+  /// Space the cached tiles take (shown in Settings, D29).
+  int get sizeBytes;
+
+  /// Removes every cached tile and gives the space back (Settings).
+  Future<void> clear();
 }
 
 /// [NetworkTileCache] in its own SQLite file (`map_cache.db`).
@@ -39,6 +45,8 @@ class SqfliteTileCache implements NetworkTileCache {
 
   /// Total size of the cached tiles, kept up to date on every write.
   int _bytes;
+
+  @override
   int get sizeBytes => _bytes;
 
   static const fileName = 'map_cache.db';
@@ -119,6 +127,14 @@ class SqfliteTileCache implements NetworkTileCache {
       _bytes += bytes.length;
     });
     if (_bytes > maxBytes) await _evict();
+  }
+
+  @override
+  Future<void> clear() async {
+    await _db.delete('cache_tiles');
+    _bytes = 0;
+    // SQLite doesn't shrink the file by itself.
+    await _db.execute('VACUUM');
   }
 
   /// Removes the oldest tiles until the cache is at 90 % of [maxBytes].

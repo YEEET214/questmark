@@ -7,6 +7,7 @@ import 'package:questmark/data/offline_region_store.dart';
 import 'package:questmark/data/tile_cache.dart';
 import 'package:questmark/ui/map/world_map_tiles.dart';
 
+import '../../helpers/fake_tile_cache.dart';
 import '../../helpers/mvt_builder.dart';
 import '../../helpers/test_mbtiles.dart';
 
@@ -334,16 +335,4 @@ class FakeRegionTiles implements RegionTileSource {
 
   @override
   Future<bool> hasTiles() async => tiles.isNotEmpty;
-}
-
-/// The browse cache in memory: `'z/x/y'` → tile.
-class FakeTileCache implements NetworkTileCache {
-  final tiles = <String, CachedTile>{};
-
-  @override
-  Future<CachedTile?> get(int z, int x, int y) async => tiles['$z/$x/$y'];
-
-  @override
-  Future<void> put(int z, int x, int y, Uint8List bytes) async =>
-      tiles['$z/$x/$y'] = CachedTile(bytes, fresh: true);
 }

@@ -48,6 +48,18 @@ void main() {
     expect(settings.themeMode, AppThemeMode.light);
   });
 
+  testWidgets('Privacy: what is sent to Nominatim, word for word '
+      '(moved from the address search, Phase 9b)', (tester) async {
+    await pump(tester);
+    await tester.scrollUntilVisible(find.text('Privacy'), 100);
+    expect(find.text('Address search'), findsOneWidget);
+    expect(
+        find.text('Searches and quest locations are sent to OpenStreetMap\'s '
+            'Nominatim service to find addresses. Your own location is only '
+            'sent, rounded to about 1 km, to name a map area you download.'),
+        findsOneWidget);
+  });
+
   testWidgets('the high contrast switch', (tester) async {
     await pump(tester);
     await tester.tap(find.byKey(const Key('highContrastSwitch')));

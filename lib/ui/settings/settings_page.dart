@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../state/map_cache_controller.dart';
 import '../../state/settings_controller.dart';
 import '../formatting.dart';
+import '../privacy_texts.dart';
 
 /// Settings (PLAN.md D28, D29), opened from the Quests page's "⋮" menu:
 /// dark mode and high contrast (changes apply at once and are saved), and
@@ -63,6 +64,22 @@ class SettingsPage extends StatelessWidget {
           ),
           if (context.select<MapCacheController?, bool>((c) => c != null))
             const _StorageSection(),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(
+              'Privacy',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(color: theme.colorScheme.primary),
+            ),
+          ),
+          // Moved here from under the address search (D31).
+          const ListTile(
+            key: Key('nominatimNote'),
+            leading: Icon(Icons.privacy_tip_outlined),
+            title: Text('Address search'),
+            subtitle: Text(nominatimPrivacyNote),
+          ),
         ],
       ),
     );

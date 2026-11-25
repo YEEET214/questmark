@@ -242,21 +242,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a note under the search field says what is sent to '
-        'Nominatim (PR #11 review)', (tester) async {
+    testWidgets('the Nominatim note is no longer under the search field '
+        '(it moved to Settings, Phase 9b)', (tester) async {
       await openPicker(tester, geocoder: geocoder());
-      final note = find.byKey(const Key('nominatimNote'));
-      expect(note, findsOneWidget);
-      expect(find.textContaining('Nominatim'), findsOneWidget);
-      expect(
-          find.textContaining('Your own location is only sent, rounded to '
-              'about 1 km, to name a map area you download.'),
-          findsOneWidget);
-      expect(tester.getRect(note).top,
-          greaterThanOrEqualTo(tester
-              .getRect(find.byKey(const Key('addressSearchField')))
-              .bottom),
-          reason: 'under the search field');
+      expect(find.byKey(const Key('nominatimNote')), findsNothing);
+      expect(find.textContaining('Nominatim'), findsNothing);
     });
 
     testWidgets('typing alone never searches (no autocomplete)',

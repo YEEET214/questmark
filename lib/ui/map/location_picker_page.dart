@@ -398,23 +398,9 @@ class _LocationPickerPageState extends State<LocationPickerPage>
                       ),
               ),
             ),
-            // Be open about what leaves the phone (user decisions, PR #11
-            // review and Phase 8b): search text, the location of quests
-            // that need an address, and, only to name a downloaded map
-            // area, a rough position (PLAN.md D26).
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                'Searches and quest locations are sent to OpenStreetMap\'s '
-                'Nominatim service to find addresses. Your own location is '
-                'only sent, rounded to about 1 km, to name a map area you '
-                'download.',
-                key: const Key('nominatimNote'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+            // What is sent to Nominatim is explained in Settings →
+            // Privacy: here it covered too much of the map (user, Phase 9b,
+            // PLAN.md D31).
             if (error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
